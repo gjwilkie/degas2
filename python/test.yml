@@ -1,0 +1,21 @@
+# A sample YAML files that runs the Analytic_fluid_bench example i
+
+elementsfile : ../data/elements.nc 
+backgroundfile : bk_boxgen.nc 
+geometryfile : ge_boxgen.nc 
+problemfile : pr_boxgen.nc 
+reactionfile : ../data/reactions.nc 
+speciesfile : ../data/species.nc 
+elements_infile : ../data/elements.input 
+problem_infile : ../examples/Analytic_fluid_bench/pr_boxgen.input
+reaction_infile : ../data/reactions.input
+species_infile : ../data/species.input
+materials_infile : ../data/materials.input
+materialsfile : ../data/materials.nc
+pmi_infile : ../data/pmi.input
+pmifile : ../data/pmi.nc
+tallyfile : tally_boxgen.nc
+outputfile : degas2_boxgen_out.nc
+tally_infile : ../examples/Analytic_fluid_bench/tally_boxgen.input
+
+

@@ -1,176 +1,73 @@
-ifeq ($(FORTRAN90),yes)
-al_MOD:=allocate_mod.$O
-bk_MOD:=background_mod.$O
-dx_MOD:=degas2_xgc_mod.$O
-de_MOD:=detector_mod.$O
-ef_MOD:=efititp_mod.$O
-el_MOD:=element_mod.$O
-ff_MOD:=flight_frag_mod.$O
-g2_MOD:=geometry2d_mod.$O
-gi_MOD:=geomint_mod.$O
-cm_MOD:=macros_mod.$O
-ma_MOD:=materials_mod.$O
-mp_MOD:=mpi_mod.$O
-ou_MOD:=output_mod.$O
-pm_MOD:=pmi_mod.$O
-pd_MOD:=pmidata_mod.$O
-pf_MOD:=pmiformat_mod.$O
-po_MOD:=postdetector_mod.$O
-pr_MOD:=problem_mod.$O
-ps_MOD:=problem_mod.$O
-ra_MOD:=ratecalc_mod.$O
-rc_MOD:=reaction_mod.$O
-rd_MOD:=reactiondata_mod.$O
-rf_MOD:=readfilenames_mod.$O
-sc_MOD:=sector_mod.$O
-sn_MOD:=snapshot_pdf_mod.$O
-so_MOD:=sources_mod.$O
-sp_MOD:=species_mod.$O
-sa_MOD:=stat_mod.$O
-tl_MOD:=tally_mod.$O
-xi_MOD:=xgc1interp_mod.$O
-xs_MOD:=xsection_mod.$O
-zn_MOD:=zone_mod.$O
-acc_output_mods:= $(ou_MOD) $(pr_MOD) $(rf_MOD) $(so_MOD) $(tl_MOD)
-acc_output.o: $(acc_output_mods)
-adaswrite_mods:= $(rc_MOD) $(sp_MOD) $(xs_MOD)
-adaswrite.o: $(adaswrite_mods)
-allocate_mods:= $(al_MOD)
-allocate.o: $(allocate_mods)
-aux2dsetup_mods:= $(gi_MOD) $(zn_MOD)
-aux2dsetup.o: $(aux2dsetup_mods)
-boxgen_mods:= $(bk_MOD) $(de_MOD) $(gi_MOD) $(ma_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-boxgen.o: $(boxgen_mods)
-btopdetector_mods:= $(de_MOD) $(zn_MOD)
-btopdetector.o: $(btopdetector_mods)
-collide_mods:= $(bk_MOD) $(gi_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(sp_MOD) $(zn_MOD)
-collide.o: $(collide_mods)
-composite_mods:= $(gi_MOD) $(zn_MOD)
-composite.o: $(composite_mods)
-conversions_mods:= $(bk_MOD) $(gi_MOD) $(pr_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-conversions.o: $(conversions_mods)
-cramdadd_mods:= $(bk_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(rf_MOD) $(sp_MOD) $(zn_MOD)
-cramdadd.o: $(cramdadd_mods)
-dataexam_mods:= $(rc_MOD) $(xs_MOD)
-dataexam.o: $(dataexam_mods)
-datamatch_mods:= $(xs_MOD)
-datamatch.o: $(datamatch_mods)
-dediagsetup_mods:= $(de_MOD) $(gi_MOD) $(pr_MOD) $(sc_MOD) $(zn_MOD)
-dediagsetup.o: $(dediagsetup_mods)
-def2ddetector_mods:= $(de_MOD) $(zn_MOD)
-def2ddetector.o: $(def2ddetector_mods)
-def2dplasma_mods:= $(bk_MOD) $(gi_MOD) $(zn_MOD)
-def2dplasma.o: $(def2dplasma_mods)
-defineback_mods:= $(bk_MOD) $(gi_MOD) $(pr_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-defineback.o: $(defineback_mods)
-definegeometry2d_mods:= $(g2_MOD) $(gi_MOD) $(ma_MOD) $(sc_MOD) $(zn_MOD)
-definegeometry2d.o: $(definegeometry2d_mods)
-degas2_xgc_mods:= $(bk_MOD) $(dx_MOD) $(mp_MOD) $(ou_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-degas2_xgc.o: $(degas2_xgc_mods)
-degasinit_mods:= $(mp_MOD) $(pr_MOD) $(tl_MOD)
-degasinit.o: $(degasinit_mods)
-doflights_mods:= $(bk_MOD) $(de_MOD) $(ff_MOD) $(mp_MOD) $(ou_MOD) $(pr_MOD) $(rf_MOD) $(sa_MOD) $(sn_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-doflights.o: $(doflights_mods)
-efit2dg2d_mods:= $(ef_MOD)
-efit2dg2d.o: $(efit2dg2d_mods)
-elementread_mods:= $(bk_MOD) $(el_MOD) $(mp_MOD) $(rc_MOD) $(rf_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-elementread.o: $(elementread_mods)
-elementsetup_mods:= $(el_MOD) $(rf_MOD)
-elementsetup.o: $(elementsetup_mods)
-flight_mods:= $(bk_MOD) $(ff_MOD) $(pm_MOD) $(pr_MOD) $(rc_MOD) $(sa_MOD) $(sc_MOD) $(sn_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-flight.o: $(flight_mods)
-flighttest_mods:= $(bk_MOD) $(ff_MOD) $(mp_MOD) $(ou_MOD) $(pr_MOD) $(rc_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-flighttest.o: $(flighttest_mods)
-geometry_mods:= $(de_MOD) $(gi_MOD) $(mp_MOD) $(rf_MOD) $(sc_MOD) $(zn_MOD)
-geometry.o: $(geometry_mods)
-geomfront_mods:= $(gi_MOD) $(sc_MOD)
-geomfront.o: $(geomfront_mods)
-geomsetup_mods:= $(al_MOD) $(de_MOD) $(gi_MOD) $(rf_MOD) $(sc_MOD) $(zn_MOD)
-geomsetup.o: $(geomsetup_mods)
-geomtest_mods:= $(bk_MOD) $(zn_MOD)
-geomtest.o: $(geomtest_mods)
-geomtesta_mods:= $(bk_MOD) $(de_MOD) $(ou_MOD) $(pr_MOD) $(rf_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-geomtesta.o: $(geomtesta_mods)
-gpicamera_mods:= $(de_MOD) $(zn_MOD)
-gpicamera.o: $(gpicamera_mods)
-matcheir_mods:= $(ou_MOD) $(pr_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-matcheir.o: $(matcheir_mods)
-matchout_mods:= $(ou_MOD) $(pr_MOD) $(rf_MOD) $(so_MOD) $(tl_MOD)
-matchout.o: $(matchout_mods)
-materialsetup_mods:= $(ma_MOD) $(rf_MOD)
-materialsetup.o: $(materialsetup_mods)
-ncsxplasma_mods:= $(bk_MOD) $(g2_MOD) $(pr_MOD) $(sp_MOD) $(zn_MOD)
-ncsxplasma.o: $(ncsxplasma_mods)
-nstxgpi2_mods:= $(bk_MOD) $(gi_MOD) $(zn_MOD)
-nstxgpi2.o: $(nstxgpi2_mods)
-outputbrowser_mods:= $(de_MOD) $(gi_MOD) $(ou_MOD) $(pm_MOD) $(pr_MOD) $(rc_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-outputbrowser.o: $(outputbrowser_mods)
-plate_mods:= $(pd_MOD) $(pf_MOD) $(pm_MOD) $(pr_MOD) $(sp_MOD)
-plate.o: $(plate_mods)
-plotgeom_mods:= $(gi_MOD) $(zn_MOD)
-plotgeom.o: $(plotgeom_mods)
-pmimatread_mods:= $(ma_MOD) $(mp_MOD) $(ou_MOD) $(pd_MOD) $(pm_MOD) $(pr_MOD) $(rd_MOD) $(rf_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD)
-pmimatread.o: $(pmimatread_mods)
-pmisetup_mods:= $(ma_MOD) $(pm_MOD) $(rf_MOD) $(sp_MOD)
-pmisetup.o: $(pmisetup_mods)
-pmitest_mods:= $(ma_MOD) $(pd_MOD) $(pm_MOD) $(pr_MOD) $(rc_MOD) $(sp_MOD)
-pmitest.o: $(pmitest_mods)
-pmiwrite_mods:= $(el_MOD) $(pf_MOD)
-pmiwrite.o: $(pmiwrite_mods)
-poly_to_tri_mods:= $(g2_MOD) $(sc_MOD) $(zn_MOD)
-poly_to_tri.o: $(poly_to_tri_mods)
-postdetector_mods:= $(bk_MOD) $(de_MOD) $(mp_MOD) $(ou_MOD) $(po_MOD) $(pr_MOD) $(rf_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-postdetector.o: $(postdetector_mods)
-problemsetup_mods:= $(el_MOD) $(ma_MOD) $(pm_MOD) $(pr_MOD) $(ps_MOD) $(rc_MOD) $(rf_MOD) $(sp_MOD)
-problemsetup.o: $(problemsetup_mods)
-psiinterp_mods:= $(ef_MOD)
-psiinterp.o: $(psiinterp_mods)
-pvmmaster_mods:= $(zn_MOD)
-pvmmaster.o: $(pvmmaster_mods)
-pvmslave_mods:= $(zn_MOD)
-pvmslave.o: $(pvmslave_mods)
-ratecalc_mods:= $(ra_MOD) $(rf_MOD) $(xs_MOD)
-ratecalc.o: $(ratecalc_mods)
-reaction_mods:= $(bk_MOD) $(gi_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(sp_MOD) $(xs_MOD) $(zn_MOD)
-reaction.o: $(reaction_mods)
-reactionsetup_mods:= $(rc_MOD) $(rf_MOD) $(sp_MOD)
-reactionsetup.o: $(reactionsetup_mods)
-reactiontest_mods:= $(el_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(sp_MOD)
-reactiontest.o: $(reactiontest_mods)
-reactionwrite_mods:= $(xs_MOD)
-reactionwrite.o: $(reactionwrite_mods)
-readbackground_mods:= $(bk_MOD) $(el_MOD) $(gi_MOD) $(pr_MOD) $(rc_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-readbackground.o: $(readbackground_mods)
-readfilenames_mods:= $(rf_MOD)
-readfilenames.o: $(readfilenames_mods)
-readgeometry_mods:= $(de_MOD) $(gi_MOD) $(ma_MOD) $(sc_MOD) $(zn_MOD)
-readgeometry.o: $(readgeometry_mods)
-score_mods:= $(bk_MOD) $(de_MOD) $(gi_MOD) $(pr_MOD) $(rc_MOD) $(rd_MOD) $(sa_MOD) $(sc_MOD) $(sn_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-score.o: $(score_mods)
-sources_mods:= $(bk_MOD) $(gi_MOD) $(pr_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-sources.o: $(sources_mods)
-sourcetest_mods:= $(gi_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-sourcetest.o: $(sourcetest_mods)
-speciesetup_mods:= $(el_MOD) $(rf_MOD) $(sp_MOD)
-speciesetup.o: $(speciesetup_mods)
-stat_mods:= $(ou_MOD) $(pr_MOD) $(sa_MOD) $(tl_MOD)
-stat.o: $(stat_mods)
-sysdep_mods:= $(mem_MOD)
-sysdep.o: $(sysdep_mods)
-tallysetup_mods:= $(de_MOD) $(gi_MOD) $(pr_MOD) $(rc_MOD) $(rf_MOD) $(sc_MOD) $(so_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-tallysetup.o: $(tallysetup_mods)
-ucd_plot_mods:= $(bk_MOD) $(de_MOD) $(g2_MOD) $(ou_MOD) $(pr_MOD) $(rf_MOD) $(sc_MOD) $(sp_MOD) $(tl_MOD) $(zn_MOD)
-ucd_plot.o: $(ucd_plot_mods)
-uedgeback_mods:= $(so_MOD)
-uedgeback.o: $(uedgeback_mods)
-updatebackground_mods:= $(bk_MOD) $(pr_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-updatebackground.o: $(updatebackground_mods)
-writeback_mods:= $(bk_MOD) $(el_MOD) $(g2_MOD) $(gi_MOD) $(mp_MOD) $(pr_MOD) $(rc_MOD) $(rf_MOD) $(sc_MOD) $(sn_MOD) $(so_MOD) $(sp_MOD) $(zn_MOD)
-writeback.o: $(writeback_mods)
-xgc1_gpi_mods:= $(bk_MOD) $(gi_MOD) $(xi_MOD) $(zn_MOD)
-xgc1_gpi.o: $(xgc1_gpi_mods)
-endif
-ifeq ($(STANDALONE),yes)
+acc_output_mods= output_mod.f problem_mod.f readfilenames_mod.f sources_mod.f tally_mod.f
+adaswrite_mods= reaction_mod.f species_mod.f xsection_mod.f
+allocate_mods= allocate_mod.f
+aux2dsetup_mods= geomint_mod.f zone_mod.f
+boxgen_mods= background_mod.f detector_mod.f geomint_mod.f materials_mod.f sector_mod.f sources_mod.f species_mod.f zone_mod.f
+btopdetector_mods= detector_mod.f zone_mod.f
+collide_mods= background_mod.f geomint_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f species_mod.f zone_mod.f
+composite_mods= geomint_mod.f zone_mod.f
+conversions_mods= background_mod.f geomint_mod.f problem_mod.f species_mod.f tally_mod.f zone_mod.f
+cramdadd_mods= background_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f readfilenames_mod.f species_mod.f zone_mod.f
+dataexam_mods= reaction_mod.f xsection_mod.f
+datamatch_mods= xsection_mod.f
+dediagsetup_mods= detector_mod.f geomint_mod.f problem_mod.f sector_mod.f zone_mod.f
+def2ddetector_mods= detector_mod.f zone_mod.f
+def2dplasma_mods= background_mod.f geomint_mod.f zone_mod.f
+defineback_mods= background_mod.f geomint_mod.f problem_mod.f sector_mod.f sources_mod.f species_mod.f zone_mod.f
+definegeometry2d_mods= geometry2d_mod.f geomint_mod.f materials_mod.f sector_mod.f zone_mod.f
+degas2_xgc_mods= background_mod.f degas2_xgc_mod.f mpi_mod.f output_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f sector_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+degasinit_mods= mpi_mod.f problem_mod.f tally_mod.f
+doflights_mods= background_mod.f detector_mod.f flight_frag_mod.f mpi_mod.f output_mod.f problem_mod.f readfilenames_mod.f stat_mod.f snapshot_pdf_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+efit2dg2d_mods= efititp_mod.f
+elementread_mods= background_mod.f element_mod.f mpi_mod.f reaction_mod.f readfilenames_mod.f sources_mod.f species_mod.f zone_mod.f
+elementsetup_mods= element_mod.f readfilenames_mod.f
+flight_mods= background_mod.f flight_frag_mod.f pmi_mod.f problem_mod.f reaction_mod.f stat_mod.f sector_mod.f snapshot_pdf_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+flighttest_mods= background_mod.f flight_frag_mod.f mpi_mod.f output_mod.f problem_mod.f reaction_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+geometry_mods= detector_mod.f geomint_mod.f mpi_mod.f readfilenames_mod.f sector_mod.f zone_mod.f
+geomfront_mods= geomint_mod.f sector_mod.f
+geomsetup_mods= allocate_mod.f detector_mod.f geomint_mod.f readfilenames_mod.f sector_mod.f zone_mod.f
+geomtest_mods= background_mod.f zone_mod.f
+geomtesta_mods= background_mod.f detector_mod.f output_mod.f problem_mod.f readfilenames_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+gpicamera_mods= detector_mod.f zone_mod.f
+matcheir_mods= output_mod.f problem_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+matchout_mods= output_mod.f problem_mod.f readfilenames_mod.f sources_mod.f tally_mod.f
+materialsetup_mods= materials_mod.f readfilenames_mod.f
+ncsxplasma_mods= background_mod.f geometry2d_mod.f problem_mod.f species_mod.f zone_mod.f
+nstxgpi2_mods= background_mod.f geomint_mod.f zone_mod.f
+outputbrowser_mods= detector_mod.f geomint_mod.f output_mod.f pmi_mod.f problem_mod.f reaction_mod.f sector_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+plate_mods= pmidata_mod.f pmiformat_mod.f pmi_mod.f problem_mod.f species_mod.f
+plotgeom_mods= geomint_mod.f zone_mod.f
+pmimatread_mods= materials_mod.f mpi_mod.f output_mod.f pmidata_mod.f pmi_mod.f problem_mod.f reactiondata_mod.f readfilenames_mod.f sources_mod.f species_mod.f tally_mod.f
+pmisetup_mods= materials_mod.f pmi_mod.f readfilenames_mod.f species_mod.f
+pmitest_mods= materials_mod.f pmidata_mod.f pmi_mod.f problem_mod.f reaction_mod.f species_mod.f
+pmiwrite_mods= element_mod.f pmiformat_mod.f
+poly_to_tri_mods= geometry2d_mod.f sector_mod.f zone_mod.f
+postdetector_mods= background_mod.f detector_mod.f mpi_mod.f output_mod.f postdetector_mod.f problem_mod.f readfilenames_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+problemsetup_mods= element_mod.f materials_mod.f pmi_mod.f problem_mod.f problem_mod.f reaction_mod.f readfilenames_mod.f species_mod.f
+psiinterp_mods= efititp_mod.f
+pvmmaster_mods= zone_mod.f
+pvmslave_mods= zone_mod.f
+ratecalc_mods= ratecalc_mod.f readfilenames_mod.f xsection_mod.f
+reaction_mods= background_mod.f geomint_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f species_mod.f xsection_mod.f zone_mod.f
+reactionsetup_mods= reaction_mod.f readfilenames_mod.f species_mod.f
+reactiontest_mods= element_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f species_mod.f
+reactionwrite_mods= xsection_mod.f
+readbackground_mods= background_mod.f element_mod.f geomint_mod.f problem_mod.f reaction_mod.f sector_mod.f sources_mod.f species_mod.f zone_mod.f
+readfilenames_mods= readfilenames_mod.f
+readgeometry_mods= detector_mod.f geomint_mod.f materials_mod.f sector_mod.f zone_mod.f
+score_mods= background_mod.f detector_mod.f geomint_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f stat_mod.f sector_mod.f snapshot_pdf_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+sources_mods= background_mod.f geomint_mod.f problem_mod.f sector_mod.f sources_mod.f species_mod.f zone_mod.f
+sourcetest_mods= geomint_mod.f sector_mod.f sources_mod.f species_mod.f zone_mod.f
+speciesetup_mods= element_mod.f readfilenames_mod.f species_mod.f
+stat_mods= output_mod.f problem_mod.f stat_mod.f tally_mod.f
+sysdep_mods= $(mem_MOD)
+tallysetup_mods= detector_mod.f geomint_mod.f problem_mod.f reaction_mod.f readfilenames_mod.f sector_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f
+ucd_plot_mods= background_mod.f detector_mod.f geometry2d_mod.f output_mod.f problem_mod.f readfilenames_mod.f sector_mod.f species_mod.f tally_mod.f zone_mod.f
+uedgeback_mods= sources_mod.f
+updatebackground_mods= background_mod.f problem_mod.f sources_mod.f species_mod.f zone_mod.f
+usr2ddetector_mods= detector_mod.f zone_mod.f
+writeback_mods= background_mod.f element_mod.f geometry2d_mod.f geomint_mod.f mpi_mod.f problem_mod.f reaction_mod.f readfilenames_mod.f sector_mod.f snapshot_pdf_mod.f sources_mod.f species_mod.f zone_mod.f
+xgc1_gpi_mods= background_mod.f geomint_mod.f xgc1interp_mod.f zone_mod.f
 acc_output.f: array.hweb constants.hweb macros.hweb materials.hweb netcdf.hweb output.hweb problem.hweb random.hweb reaction.hweb readfilenames.hweb sector.hweb sources.hweb species.hweb string.hweb sysdep.hweb tally.hweb vector.hweb zone.hweb
 adas_xxdata_11.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
 adaswrite.f: array.hweb constants.hweb macros.hweb netcdf.hweb reaction.hweb readfilenames.hweb species.hweb string.hweb sysdep.hweb vector.hweb xsection.hweb
@@ -249,7 +146,6 @@ stat.f: array.hweb constants.hweb macros.hweb materials.hweb output.hweb problem
 string.f: array.hweb constants.hweb macros.hweb sysdep.hweb vector.hweb
 sysdep.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
 sysdeptest.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
-t_isotrop.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
 tallysetup.f: array.hweb constants.hweb detector.hweb element.hweb geomint.hweb location.hweb macros.hweb materials.hweb netcdf.hweb pmi.hweb pmidata.hweb pmiformat.hweb problem.hweb random.hweb reaction.hweb readfilenames.hweb sector.hweb sources.hweb species.hweb string.hweb sysdep.hweb tally.hweb vector.hweb zone.hweb
 template.f: array.hweb constants.hweb macros.hweb sysdep.hweb vector.hweb
 teststring.f: array.hweb constants.hweb macros.hweb sysdep.hweb vector.hweb
@@ -257,6 +153,7 @@ tri_to_sonnet.f: array.hweb constants.hweb geometry2d.hweb macros.hweb string.hw
 ucd_plot.f: array.hweb background.hweb constants.hweb detector.hweb geometry2d.hweb macros.hweb materials.hweb netcdf.hweb output.hweb problem.hweb random.hweb reaction.hweb readfilenames.hweb sector.hweb sources.hweb species.hweb string.hweb sysdep.hweb tally.hweb vector.hweb zone.hweb
 uedgeback.f: array.hweb background.hweb constants.hweb macros.hweb netcdf.hweb random.hweb sources.hweb string.hweb sysdep.hweb vector.hweb zone.hweb
 updatebackground.f: array.hweb background.hweb constants.hweb macros.hweb materials.hweb netcdf.hweb problem.hweb random.hweb reaction.hweb readfilenames.hweb sources.hweb species.hweb string.hweb sysdep.hweb vector.hweb zone.hweb
+usr2ddetector.f: array.hweb constants.hweb detector.hweb geometry2d.hweb geomint.hweb macros.hweb string.hweb sysdep.hweb vector.hweb zone.hweb
 voigt.f: array.hweb constants.hweb macros.hweb sysdep.hweb vector.hweb
 voigtspec.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
 voigttest.f: array.hweb constants.hweb macros.hweb string.hweb sysdep.hweb vector.hweb
@@ -278,4 +175,7 @@ stat_mod.f: materials.hweb output.hweb problem.hweb random.hweb reaction.hweb se
 tally_mod.f: materials.hweb problem.hweb reaction.hweb sector.hweb species.hweb zone.hweb
 xgc1interp_mod.f: zone.hweb
 xsection_mod.f: reaction.hweb
-endif
+ 
+ 
+randomtest_moddeps = 
+datasetup_moddeps = background_mod.f element_mod.f materials_mod.f mpi_mod.f output_mod.f pmi_mod.f pmidata_mod.f problem_mod.f reaction_mod.f reactiondata_mod.f readfilenames_mod.f sources_mod.f species_mod.f tally_mod.f zone_mod.f

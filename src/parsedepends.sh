@@ -51,16 +51,19 @@ sed -i 's/\$(zn_MOD)/zone_mod.f/g' Makefile.depends
 # Now , define *_deps varibles to store unique lists of sources
 bins=(`grep bin_PROGRAMS $automakefile | sed 's/bin_PROGRAMS.*=\(.*\)/\1/g'`)
 
+echo " " >> Makefile.depends
+
 for bin in "${bins[@]}"; do
 	echo "bin=$bin"
-	predeps=(`grep ${bin}_SOURCES\ =\ $bin $automakefile | sed "s/${bin}_SOURCES.*=\(.*\)/\1/g"`)
+	predeps=(`grep "^${bin}_SOURCES\ +=\ $bin" $automakefile | sed "s/${bin}_SOURCES.*=\(.*\)/\1/g"`)
+	echo predeps="${predeps[@]}"
 
 	deps=()
 	for dep in "${predeps[@]}"; do
 		depstrip=`echo $dep|sed 's/\(.*\)\.f/\1/g'`
 		echo dep=$dep
 		echo depstrip=$depstrip
-		mods=(`grep ${depstrip}_mods Makefile.depends | sed "s/${depstrip}_mods=\ \(.*\)/\1/g"`)
+		mods=(`grep "^${depstrip}_mods=" Makefile.depends | sed "s/${depstrip}_mods=\ \(.*\)$/\1/g"`)
 		echo mods="${mods[@]}"
 		deps+=("${mods[@]}")
 	done

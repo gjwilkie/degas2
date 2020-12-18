@@ -53,23 +53,34 @@ bins=(`grep bin_PROGRAMS $automakefile | sed 's/bin_PROGRAMS.*=\(.*\)/\1/g'`)
 
 echo " " >> Makefile.depends
 
+deps_done=()
 for bin in "${bins[@]}"; do
 	echo "bin=$bin"
-	predeps=(`grep "^${bin}_SOURCES\ +=\ $bin" $automakefile | sed "s/${bin}_SOURCES.*=\(.*\)/\1/g"`)
-	echo predeps="${predeps[@]}"
+	predeps=(`grep "^${bin}_SOURCES\ =\ " $automakefile | sed "s/${bin}_SOURCES\ =\ \(.*\)/\1/g"`)
+#	echo predeps="${predeps[@]}"
 
 	deps=()
+        deps+=("sysdep.f")
+        deps+=("string.f")
 	for dep in "${predeps[@]}"; do
 		depstrip=`echo $dep|sed 's/\(.*\)\.f/\1/g'`
-		echo dep=$dep
-		echo depstrip=$depstrip
+#		echo dep=$dep
+#		echo depstrip=$depstrip
 		mods=(`grep "^${depstrip}_mods=" Makefile.depends | sed "s/${depstrip}_mods=\ \(.*\)$/\1/g"`)
-		echo mods="${mods[@]}"
+#		echo mods="${mods[@]}"
 		deps+=("${mods[@]}")
+
+		if [[ ! " ${bins[@]} " =~ " ${depstrip} " ]]; then
+			if [[ ! " ${deps_done[@]} " =~ " ${depstrip} " ]]; then
+				modsstrip=(`echo ${deps[@]} | sed 's/\.f/\.o/g'`)
+				echo "$depstrip.o: ${modsstrip[@]}" >> Makefile.depends
+				deps_done+=("${depstrip}")
+			fi
+		fi
 	done
 	echo "${deps[@]}"
 	IFS=$'\n'
 	sorted=($(sort <<<"${deps[*]}" | uniq))
 	unset IFS
-	echo "${bin}_moddeps = ${sorted[*]}" >> Makefile.depends
+	echo "${bin}_deps = ${sorted[*]}" >> Makefile.depends
 done

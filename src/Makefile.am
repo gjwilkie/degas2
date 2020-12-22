@@ -16,7 +16,7 @@ poly_to_tri_SOURCES = poly_to_tri.f geometry.f allocate.f readfilenames.f
 ucd_plot_SOURCES = ucd_plot.f geometry.f allocate.f readfilenames.f elementread.f pmimatread.f  reaction.f interpolate.f random.f degasinit.f
 adaswrite_SOURCES = adaswrite.f adas_xxdata_11.f elementread.f reaction.f interpolate.f readfilenames.f random.f
 efit2dg2d_SOURCES = bspline.mod bspline90_22.o efit2dg2d.f aux2dsetup.f psiinterp.f interpolate.f
-geomtest_SOURCES = geomtest.f geometry.f geomsetup.f allocate.f geomutils.f geomfaces.f composite.f string.f readfilenames.f geomfront.f dediagsetup.f
+geomtest_SOURCES = geomtest.f geometry.f geomsetup.f allocate.f geomutils.f geomfaces.f composite.f readfilenames.f geomfront.f dediagsetup.f
 geomtesta_SOURCES = geomtesta.f geometry.f plotgeom.f elementread.f pmimatread.f readfilenames.f reaction.f interpolate.f collide.f randother.f random.f conversions.f voigt.f degasinit.f 
 matchout_SOURCES = matchout.f pmimatread.f elementread.f geometry.f readfilenames.f degasinit.f
 matcheir_SOURCES = matcheir.f pmimatread.f elementread.f geometry.f readfilenames.f degasinit.f
@@ -24,16 +24,16 @@ acc_output_SOURCES = acc_output.f pmimatread.f elementread.f geometry.f readfile
 reactionwrite_SOURCES = reactionwrite.f
 pmiwrite_SOURCES = pmiwrite.f interpolate.f random.f readfilenames.f elementread.f 
 problemsetup_SOURCES = problemsetup.f elementread.f pmimatread.f reaction.f interpolate.f readfilenames.f plate.f geometry.f random.f randother.f
-geomread_SOURCES = geomread.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f string.f elementread.f pmimatread.f
+geomread_SOURCES = geomread.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f elementread.f pmimatread.f
 cramdtest_SOURCES = cramdtest.f cramdadd.f readfilenames.f elementread.f pmimatread.f geometry.f degasinit.f
 cramdtesta_SOURCES = cramdtesta.f cramdadd.f pmimatread.f
 degasgeom_SOURCES = degasgeom.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f random.f
 test_SOURCES = test.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f
-readgeometry_SOURCES = readgeometry.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f string.f readdegas.f readfilenames.f elementread.f pmimatread.f dediagsetup.f aux2dsetup.f def2ddetector.f
-definegeometry2d_SOURCES = definegeometry2d.f string.f geomsetup.f allocate.f composite.f geomutils.f geomfaces.f geometry.f aux2dsetup.f pmimatread.f dediagsetup.f readfilenames.f plotgeom.f def2ddetector.f
-defineback_SOURCES = defineback.f string.f writeback.f pmimatread.f geometry.f elementread.f geomsetup.f aux2dsetup.f allocate.f geomutils.f geomfaces.f readfilenames.f reaction.f interpolate.f random.f composite.f def2dplasma.f psiinterp.f bspline.mod bspline90_22.o 
+readgeometry_SOURCES = readgeometry.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f readdegas.f readfilenames.f elementread.f pmimatread.f dediagsetup.f aux2dsetup.f def2ddetector.f
+definegeometry2d_SOURCES = definegeometry2d.f geomsetup.f allocate.f composite.f geomutils.f geomfaces.f geometry.f aux2dsetup.f pmimatread.f dediagsetup.f readfilenames.f plotgeom.f def2ddetector.f definegeometry2dc.c triangle.c triangle.h
+defineback_SOURCES = defineback.f writeback.f pmimatread.f geometry.f elementread.f geomsetup.f aux2dsetup.f allocate.f geomutils.f geomfaces.f readfilenames.f reaction.f interpolate.f random.f composite.f def2dplasma.f psiinterp.f bspline.mod bspline90_22.o 
 boxgen_SOURCES = boxgen.f readfilenames.f geomsetup.f allocate.f composite.f geomutils.f geomfaces.f geometry.f pmimatread.f elementread.f writeback.f cramdadd.f dediagsetup.f reaction.f interpolate.f random.f aux2dsetup.f
-plotflight_SOURCES = plotflight.f string.f
+plotflight_SOURCES = plotflight.f 
 cramdproblem_SOURCES = cramdproblem.f pmimatread.f cramdadd.f readfilenames.f elementread.f geometry.f
 readfilenames_SOURCES =  readfilenames.f readfilenames.f
 updatebackground_SOURCES = updatebackground.f elementread.f readfilenames.f geomsetup.f allocate.f writeback.f pmimatread.f random.f geomutils.f geometry.f geomfaces.f reaction.f interpolate.f
@@ -47,7 +47,7 @@ dataexam_SOURCES = dataexam.f readfilenames.f elementread.f
 outputbrowser_SOURCES = outputbrowser.f readfilenames.f degasinit.f pmimatread.f elementread.f geometry.f
 postdetector_SOURCES = postdetector.f readfilenames.f degasinit.f pmimatread.f elementread.f geometry.f dediagsetup.f def2ddetector.f
 datamatch_SOURCES = datamatch.f 
-tallysetup_SOURCES = tallysetup.f elementread.f pmimatread.f readfilenames.f string.f geometry.f
+tallysetup_SOURCES = tallysetup.f elementread.f pmimatread.f readfilenames.f  geometry.f
 allocate_SOURCES = allocate.f
 array_SOURCES = 
 teststring_SOURCES =
@@ -56,7 +56,7 @@ readbackground_SOURCES = readbackground.f readdegas.f geometry.f elementread.f r
 speciesetup_SOURCES = elementread.f 
 netcdf_SOURCES = netcdf.f
 # ************************************************************************************************************
-
+#BUILT_SOURCES = $(boxgen_deps) $(flighttest_deps)
 include Makefile.depends
 
 randomtest_SOURCES += $(randomtest_deps)
@@ -109,33 +109,86 @@ netcdf_SOURCES += $(netcdf_deps)
 
 LDADD=${LIBNETCDF_LIBS}
 
-SUFFIXES = .web .hweb .mweb _mod.f
+#ACLOCAL_AMFLAGS = -I/Users/gwilkie/src/degas2/src
 
-AM_FFLAGS=-fallow-argument-mismatch $(LDFLAGS)
+#AM_FFLAGS=triangle.o -I../silo-4.10.2/include 
+AM_FFLAGS=-I../silo-4.10.2/include 
+#AM_FFLAGS=-fPIC
+
+#definegeometry2d_LDADD = -L../silo-4.10.2/lib -lsilo
+#definegeometry2d_FFLAGS=-I../silo-4.10.2/include 
+definegeometry2d_LDFLAGS = -L../silo-4.10.2/lib -lsilo
+#definegeometry2d_LDADD = ../silo-4.10.2/lib/libsilo.a -lsilo
+#definegeometry2d_FFLAGS = triangle.o 
+#AM_FFLAGS=triangle.o -I../silo-4.10.2/include 
+#definegeometry2d_
+
 AM_FFLAGS+=-ffixed-form
+#if MISMATCH_FLAG
+#	AM_FFLAGS+=" -fallow-argument-mismatch"
+#endif
 
 #FTANGLE=$(PWD)/../fweb/Web/ftangle
 FTANGLE=ftangle
-TANGLEFLAGS=-mINLINE -W[ -n/ -n')' -Tv -j -yn8000 -yb200000 -ybs15000 -mFORTRAN90 -mMACOSX -mGFORTRAN
 
+# Standrad flags
+TANGLEFLAGS=-mINLINE -W[ -n/ -n')' -Tv -j -yn8000 -yb200000 -ybs15000 
+
+# Local flags for debugging
+TANGLEFLAGS+=-mMACOSX -mGFORTRAN
+
+# Enforcing GRAPH_FILE=SILO for now
+TANGLEFLAGS+= -mSILO
+
+# Also enforcing FORTRAN90
+TANGLEFLAGS+= -mFORTRAN90
+
+definegeometry2d.f definegeometry2dc.c: definegeometry2d.web triangle.h $(definegeometry2d_deps)
+	$(FTANGLE) $(TANGLEFLAGS) -=c=#c.c $<
+
+# Deprecated flags:
+# CROSSCOMPILE (no)
+# NETCDFV2
+#
+#definegometry2d: TANGLEFLAGS+= -=c=#c.c
+
+#definegeometry2dc.c: definegeometry2d.web triangle.h
+##	$(FTANGLE) $(TANGLEFLAGS) definegeometry2d.web
+
+AM_CFLAGS=-DTRILIBRARY -O
+
+# If MPI was found during configuration, tell fweb about it.
+# However, this breaks some targets:
+#  - definegeometry2d
+# This is a bug that needs to be fixed.
+# In the meantime, exclude these targets and have user "make clean" first. 
+#definegeometry2d: NOMPI="yes"
+#if @HAVE_MPI@
+#	if NOMPI	
+#	else
+#		MPIFLAG=" -mMPI=yes"
+#	endif
+#endif
 
 #FC=gfortran
 #AM_FFLAGS+=-fPIC -g
 #LD=$(FC)
 
-.PRECIOUS: %.f %.web.f
+.PRECIOUS: %.f %.mweb
 
+#SUFFIXES = .web .hweb .mweb _mod.f 
+
+#%.f: %.web
 .web.f: 
 	$(FTANGLE) $(TANGLEFLAGS) $<
 
-.hweb.mweb: makemodule
+#.hweb.mweb: makemodule
 %.mweb: %.hweb makemodule
 	./makemodule $< $@
 
 makemodule: makemodule.sh
 	cp $< $@
 	chmod a+x $@
-
 
 #.mweb_mod.f: array.hweb sysdep.hweb
 %_mod.f: %.mweb array.hweb sysdep.hweb
@@ -154,6 +207,7 @@ depend: makedepend parsedepends
 	./parsedepends
 
 psiinterp.o: bspline.mod
+
 
 #FORTRAN90=yes
 #O=o

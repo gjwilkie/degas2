@@ -13,6 +13,10 @@ sed -i 's/:=/=/g' Makefile.depends
 # Similarly, remove the stated .o dependencies. Once the sources are delcared as such, automake does the rest.
 sed -i '/^.*\.o:\ \$/d' Makefile.depends
 
+# Remove option for STANDALONE and FORTRAN90. These conditionals can be put back if necessary.
+sed -i '/endif/d' Makefile.depends
+sed -i '/ifeq/d' Makefile.depends
+
 # Now replace all instances of these abbreviations with their definitions
 # Also, replace .o with .f; automake knows what to do with .f files
 sed -i 's/\$(al_MOD)/allocate_mod.f/g' Makefile.depends
@@ -55,13 +59,13 @@ echo " " >> Makefile.depends
 
 deps_done=()
 for bin in "${bins[@]}"; do
-	echo "bin=$bin"
+	#echo "bin=$bin"
 	predeps=(`grep "^${bin}_SOURCES\ =\ " $automakefile | sed "s/${bin}_SOURCES\ =\ \(.*\)/\1/g"`)
 #	echo predeps="${predeps[@]}"
 
 	deps=()
-        deps+=("sysdep.f")
-        deps+=("string.f")
+   deps+=("sysdep.f")
+   deps+=("string.f")
 	for dep in "${predeps[@]}"; do
 		depstrip=`echo $dep|sed 's/\(.*\)\.f/\1/g'`
 #		echo dep=$dep
@@ -70,17 +74,25 @@ for bin in "${bins[@]}"; do
 #		echo mods="${mods[@]}"
 		deps+=("${mods[@]}")
 
-		if [[ ! " ${bins[@]} " =~ " ${depstrip} " ]]; then
+#		if [[ ! " ${bins[@]} " =~ " ${depstrip} " ]]; then
 			if [[ ! " ${deps_done[@]} " =~ " ${depstrip} " ]]; then
 				modsstrip=(`echo ${deps[@]} | sed 's/\.f/\.o/g'`)
 				echo "$depstrip.o: ${modsstrip[@]}" >> Makefile.depends
 				deps_done+=("${depstrip}")
 			fi
-		fi
+#		fi
 	done
-	echo "${deps[@]}"
+	#echo "${deps[@]}"
 	IFS=$'\n'
 	sorted=($(sort <<<"${deps[*]}" | uniq))
 	unset IFS
 	echo "${bin}_deps = ${sorted[*]}" >> Makefile.depends
 done
+
+# Now delete the odd non-*.f *_SOURCES. .c and .h files are listed in _SOURCES
+# for automake, but are not treated the same as .f files
+sed -i '/\.c\.o/d' Makefile.depends
+sed -i '/\.h\.o/d' Makefile.depends
+
+# Replace ".o" with ".$(OBJEXT}"
+sed -i 's/\.o/.$(OBJEXT)/g' Makefile.depends

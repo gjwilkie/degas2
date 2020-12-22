@@ -102,8 +102,8 @@ purposes of scoring.
 
 @m DIM 2
 
-@m BOXRUN 40
-@m SOLN 1
+@m BOXRUN 43
+@m SOLN 0
 
 @#if (BOXRUN == 32)         // DEGAS 2 benchmark runs
 
@@ -152,6 +152,41 @@ purposes of scoring.
 @m temp_max const(31.6228)   
 @m nx 1
 @m puff_species 'He'       
+
+/* Generic 1D case to compare with Gkyell */
+@#elif (BOXRUN == 43)
+
+@m nx 224
+
+@m puff_species 'H'       
+
+@m densfunc_a const(2.,17)
+@m densfunc_b const(1.,18)
+@m densfunc_c const(5.,18)
+@m densfunc_sig const(8.5,0)
+@m densfunc_x0 const(5.,0)
+@m ufunc_u0 const(8.5,0)
+@m ufunc_w0 const(1.,1)
+@m tfunc_Te0 const(6.,1)
+@m tfunc_l0 const(1.,2)
+@m tfunc_Ti1 const(1.,1)
+@m tfunc_l1 const(1.,1)
+@m tfunc_Ti2 const(1.27,2)
+@m tfunc_l2 const(1.20,2)
+
+@m l_plasma const(8.,1)
+@m l_wall const(1.,1)
+
+@m x_max l_plasma+l_wall
+@m z_max const(0.05)
+
+@#elif (BOXRUN == 41)
+
+@m temp_min const(2.58,-2) 
+@m nx 8
+@m puff_species 'D2'       
+
+@m x_max const(1.,-1)
 
 @#else                        // Debugging runs
 
@@ -417,7 +452,7 @@ purposes of scoring.
       poly_points[1,n]=poly_points[1,0]; poly_points[2,n]=poly_points[2,0]
       zonearray[0]=zone
       call decompose_polygon(n,poly_points,zonearray,1,facearray)
-@#if (BOXRUN == 40 || BOXRUN == 41)
+@#if (BOXRUN == 40 || BOXRUN == 41 || BOXRUN == 42 || BOXRUN == 43)
       zn_type_set(zone,zn_solid)
 @#else
       zn_type_set(zone,zn_exit)
@@ -574,6 +609,9 @@ purposes of scoring.
 @#if (BOXRUN == 40)
       material=ma_lookup('mirror')
       recyc_coef=one               // It's a mirror!!
+@#elif (BOXRUN == 43)
+         material=ma_lookup('mirror')
+         recyc_coef=one
 @#endif
 @#if (DIM > 1)
       stratum=3
@@ -769,16 +807,17 @@ A single source, a gas puff of H, is set up uniformly along |x| = |x_min|.
 
       real density,temperature,den_norm_2,x_mid            // Local
       real den_soln1(0:nxtot-1),den_soln2(0:nxtot-1)
+      real temperature_e
       integer zone,sector,ix,uedge
 
-      external n_of_x,t_of_x                               // External
-      real n_of_x,t_of_x
+      external n_of_x,t_of_x,te_of_x                       // External
+      real n_of_x,t_of_x,te_of_x
 
       box_localcommon                                           // Common
       @<Memory allocation interface@>
       st_decls
 
-@#if (BOXRUN != 40)
+@#if (BOXRUN != 40 && BOXRUN != 43)
       den_max=temp_max * den_min / temp_min
 @#endif
 
@@ -786,11 +825,18 @@ A single source, a gas puff of H, is set up uniformly along |x| = |x_min|.
       do zone=1,zn_num
          if (zn_type(zone) == zn_plasma) then
             density=n_of_x(zone_center[1,zone])
-            temperature=t_of_x(zone_center[1,zone])*electron_charge
             bk_n(1,zone)=density
             bk_n(2,zone)=density
+@#if (BOXRUN == 43)
+            temperature=t_of_x(zone_center[1,zone])*electron_charge
+            temperature_e=te_of_x(zone_center[1,zone])*electron_charge
+            bk_temp(1,zone)=temperature_e
+            bk_temp(2,zone)=temperature
+@#else
+            temperature=t_of_x(zone_center[1,zone])*electron_charge
             bk_temp(1,zone)=temperature
             bk_temp(2,zone)=temperature
+@#endif
             vc_set(bk_v(1,zone),zero,zero,zero)
             vc_set(bk_v(2,zone),zero,zero,zero)
          end if
@@ -891,6 +937,8 @@ A single source, a gas puff of H, is set up uniformly along |x| = |x_min|.
             var_realloca(source_segment_ptr_alias)
 @#if (BOXRUN == 40)
             source_current[so_seg_tot]=const(4.,21)/areal(nz)
+@#elseif (BOXRUN == 43)
+            source_current[so_seg_tot]=zero
 @#else
             source_current[so_seg_tot]=const(1.,19)/areal(nz*ny)
 @#endif
@@ -968,7 +1016,8 @@ A single source, a gas puff of H, is set up uniformly along |x| = |x_min|.
       end
 
 @ Temperature function. Calculates temperature at a given coordinate |x|. 
-Presently the profile is linear, based on parameters set in the main code.
+For most cases, the profile is linear, based on parameters set in the main code.
+The Gkyell benchmark has an analytic function for temperature.
 This is all strictly 1-D.
 
 @<Functions...@>=
@@ -978,11 +1027,14 @@ This is all strictly 1-D.
 
       real t_of_x            // Function
       real x                 // Input
-      real grad_t            // Local
+      real grad_t,xshift     // Local
 
       box_localcommon             // Common
 
-@#if (BOXRUN != 40)
+@#if (BOXRUN == 43)
+      xshift = x - 0.5*l_plasma
+      t_of_x = tfunc_Ti1*exp(-xshift/tfunc_l1) + tfunc_Ti2*exp(-xshift/tfunc_l2)
+@#elseif (BOXRUN != 40)
       grad_t = (temp_max - temp_min) / (x_max - x_min) 
       t_of_x = temp_min + (x-x_min) * grad_t
 @#else
@@ -996,6 +1048,31 @@ This is all strictly 1-D.
       return
       end
 
+@ Temperature function for electrons. Calculates temperature at a given coordinate |x|. 
+For most cases, the profile is linear, based on parameters set in the main code.
+The Gkyell benchmark has an analytic function for temperature.
+This is all strictly 1-D.
+
+@<Functions...@>=
+      function te_of_x(x)
+      implicit_none_f77
+      implicit_none_f90
+
+      real te_of_x           // Function
+      real x                 // Input
+      real grad_t,xshift     // Local
+
+      box_localcommon             // Common
+
+@#if (BOXRUN == 43)
+      xshift = x - 0.5*l_plasma
+      te_of_x = tfunc_Te0*exp(-xshift/tfunc_l0)
+@#endif
+
+      return
+      end
+
+
 @ Density function. Calculates density value assuming constant pressure. 
 The value of the pressure is determined using the min. temperature and 
 maximum density set in the main code. The local temperature is obtained 
@@ -1008,13 +1085,19 @@ from the corresponding function. This is all strictly 1-D.
 
       real n_of_x          // Function
       real x               // Input
+      real xshift, n_temp
 
       box_localcommon
       
       external t_of_x
       real t_of_x
      
-@#if (BOXRUN != 40)
+@#if (BOXRUN == 43)
+      xshift = x - 0.5*l_plasma
+      n_temp = (densfunc_a/cosh(sign(one,xshift)*(0.5*l_plasma - sign(one,xshift)*xshift -2.0)/densfunc_x0))
+      n_temp = n_temp + densfunc_b*exp(-xshift**2/(2.0*densfunc_sig**2)) + densfunc_c
+      n_of_x = n_temp
+@#elseif (BOXRUN != 40)
       n_of_x = temp_max * den_min / t_of_x(x)
 @#else
       if (x <= l_plasma) then

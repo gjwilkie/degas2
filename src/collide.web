@@ -208,7 +208,12 @@ loop: continue
       count++
  /* Pick a background particle */
       v_thermal=sqrt(independent_parameters[xs_var_sp_temperature])
-      call random_gauss(vb_therm,3,rn_args(x))
+@#if 1
+         call random_gauss_discrete(vb_therm,15,31,rn_args(x))
+@#else
+         call random_gauss(vb_therm,3,rn_args(x))
+@#endif
+
       do i=1,3
          vb_therm[i]*=v_thermal
       end do

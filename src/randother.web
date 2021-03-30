@@ -274,5 +274,60 @@ See the comments about the dimensioning of |v| in the discussion of
       return
 @#endif
       end
+// '
+// Generates a random number from a discrete distribution (in this case a Gaussian, as a test)
+// The resolution of the "mesh" is npar and nperp, meant to mimic a gyrokinetic distribution
+      subroutine random_gauss_discrete(y,npar,nperp,rn_dummy(x))
+      implicit_none_f77
+      implicit_none_f90
+      rn_decl(x)                // RNG State
+      integer npar,nperp        // Input
+      real y[1:3]             // Output
+      integer i                 // Local
+      real pi,theta,z
+      real random               // External
+      logical found 
+      real fmax, dv_par, dv_perp, vperp, vmax
+      real ftest, vpar_grid, vperp_grid
+      integer iperp,ipar
+      external random_array,random
+      data pi/dconst(3.14159265358979323846264338328)/
+      real ys[1:4] // Output
+
+      fmax = (2.0*pi)**(-1.5)
+      vmax = 3.0
+
+      dv_par = (2.0*vmax)/npar
+      dv_perp = (vmax)/nperp
+
+      found = .false.
+      do while (.not. found)
+         call random_array(ys,4,rn_args(x))
+         ys(1:3) = (2.0*ys(1:3)-1.0)*vmax
+         ys(4) = ys(4)*fmax
+
+ 
+         vperp = sqrt(ys(1)**2 + ys(2)**2)
+
+         // Find the right index for the discrete distribution
+         iperp = floor( (vperp + 0.5*dv_perp)/dv_perp )
+         ipar = floor( (ys(3) + vmax + 0.5*dv_perp )/dv_par )
+   
+         // Calculate "discrete" Gaussian
+         vperp_grid = (iperp - 0.5)*dv_perp
+         vpar_grid = -vmax + (ipar - 0.5)*dv_par
+         ftest = ((2.0*pi)**(-1.5))*exp(-0.5*(vperp_grid**2 + vpar_grid**2))
+
+         if (y(4) < ftest) then
+            found = .true.
+         endif
+      enddo
+
+      y(1:3) = ys(1:3)
+
+      return
+
+      end
+
 
 @* INDEX.

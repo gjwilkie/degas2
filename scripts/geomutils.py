@@ -112,8 +112,10 @@ def read_geqdsk(gfilename,plot=False):
     rmid = np.array(rmaxis + drmid*range(0,nrmid))
     zmid = np.array([zmaxis]*nrmid)
 
-    psi_interp = interp.interp2d(rgrid,zgrid,np.transpose(psirz).flatten(),kind="cubic")
-#    psi_interp = interp.LinearNDInterpolator(list(zip(rgrid,zgrid)),psirz)
+    # interp2d was removed in scipy 1.14.0
+    #psi_interp = interp.interp2d(rgrid,zgrid,np.transpose(psirz).flatten(),kind="cubic")
+    psi_interp = interp.RectBivariateSpline(rgrid, zgrid, psirz.T) # defaults to cubic.
+    #psi_interp = interp.LinearNDInterpolator(list(zip(rgrid,zgrid)),psirz)
     psimid = psi_interp(rmid,zmaxis)
 
     R0=rmaxis

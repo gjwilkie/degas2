@@ -136,7 +136,8 @@ def get_zone_plasma_data_through_psi(zone_coords,ne_data,Te_data,psifunc,psi_dat
     Te_zone = []
 
     for point in zone_coords:
-        psi = psifunc(point[0],point[1])
+        # scipy.interpolate.RectBivariateSpline returns an ndim=2 array for scalar input. 
+        psi = np.squeeze(psifunc(point[0],point[1]))
         ne_zone.append(ne_func(psi))
         Te_zone.append(Te_func(psi))
 

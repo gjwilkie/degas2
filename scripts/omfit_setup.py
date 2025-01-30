@@ -1,13 +1,13 @@
 # Created on Nov. 21, 2024 by qpratt
-# Example degas2 run based on the micerscript.py from  A. Angulo and G. Wilkie
+# Example degas2 run based on the micerscript.py from A. Angulo and G. Wilkie
 # 
 # SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN dir. 
-#        Also, make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
-# The user should run the following commands before executing this scipt,
+#        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
+# The user should run the following commands (on omega) before executing this scipt,
 # >> module purge
-# >> module load degas2/1.0/run_gcc8.x
+# >> module load degas2
 # This will set up the necessary env. vars and modify the path.
-
+# ----------------
 # Core python,
 import os
 import subprocess
@@ -26,7 +26,7 @@ import netCDF4 as nc
 import matplotlib.pyplot as plt
 
 # ----------------
-# Macroscopic things for this script,
+# General,
 # - input filenames (for this script),
 profile_fname = "input_profiles.nc"
 geqdsk_fname = "geqdsk"
@@ -59,18 +59,20 @@ else:
 
 # ----------------
 # Macroscopic DEGAS2 setup,
-d2path = os.environ["DEGAS2_BIN"] # set with module load degas2/1.0/run_gcc8.x.lua
+d2path = os.environ["DEGAS2_BIN"] # set with >> module load degas2
 # start with inputs = ['degas2.in','tally.in']
-print(f"INFO (omfit_setup): d2path={d2path}")
+print(f"INFO (omfit_setup): DEGAS2_BIN={d2path}")
 
 # ----------------
 # Profile setup,
-# This script follows the convention that psi is normalized (0 = magnetic axis, 1 = separatrix)
+# We use the normalized poloidal magnetic flux, psi_n, as the radial coordinate.
 # Kinetic profiles are read from a .nc dataset,
 profiles = nc.Dataset(profile_fname)
 profiles.set_auto_mask(False) # makes variables come in as np.array rather than MaskedArrays
-# Append something far away (rho = 2.0) so things are defined over the whole grid.
-psi_data = list(profiles["rho"][:]) + [2.0]
+
+# [WIP] - Append 0 far away (psi_n = 2.0) so the plasma is defined over the whole grid.
+#   It is probably better to load the gEQDSK here and put zero at the maximum psi_n in the vessel?
+psi_data = list(profiles["psi_n"][:]) + [2.0]
 ne_data = list(profiles["n_e"][:]) + [0.] # [/m3]
 Te_data = list(profiles["T_e"][:]) + [0.] # [eV]
 Ti_data = list(profiles["T_i"][:])  + [0.]# [eV]
@@ -80,16 +82,36 @@ profiles.close()
 
 # ----------------
 # Magnetic equilibrium,
-# Must be put in working directory, 
 geqdsk_file = geqdsk_fname
 
 # ----------------
 # DEGAS2 problemsetup,
+# From the degas2/scripts/problem.py
 run_problemsetup = setup_kwargs.get("run_problemsetup", True)
 if run_problemsetup:
-    # From the degas2/scripts/problem.py
-    # Generates degas2 problem input files based on a predefined 'C-D' case.
-    p = problem.genStdProblem("C-D")
+    problemsetup_kwargs = setup_kwargs.get("problemsetup", {})
+    # Toggle between 'genStdProblem' and the underlying 'generateProblemInput',
+    custom_problem_input = problemsetup_kwargs.get("custom_problem_input", False)
+    # 
+    if custom_problem_input:
+        print(f"INFO (omfit_setup): Using custom 'problemsetup' inputs - check values in 'problem.in'")
+        # Gather args for 'generateProblemInput' from problemsetup_kwargs, use "C-D" as default,
+        cd_problem_defaults = dict(test_species=["0","D","D2","D2+"],
+                               background_species=["e","D+"],
+                               reactions=["hionize5","dd_chargex","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"],
+                               materials=["C"],
+                               pmis=["hdesorbc","h2desorbc","dreflc"],
+                           )
+        args = []
+        for k, v in cd_problem_defaults.items():
+            args += [problemsetup_kwargs.get(k, v)]
+        # pass args to 'generateProblemInput()'
+        p = problem.generateProblemInput(*args)
+    else:
+        # Generates degas2 problem input files based on a predefined cases.
+        std_problem_label = problemsetup_kwargs.get("std_problem_label","C-D")
+        print(f"INFO (omfit_setup): Using standard problem label='{std_problem_label}'")
+        p = problem.genStdProblem(std_problem_label)
     # >>>>
     # outputs = ['problem.in','problem.nc']
     print("Running problemsetup...\n")
@@ -103,10 +125,11 @@ else:
 # ----------------
 # DEGAS2 definegeometry2d,
 # NOTE: we still need to run 'generateGeometryFromEFITfile'
-#       to create the psifunc interpolant for defineback, even if
+#       to create the psifunc interpolant (psi_n(R,Z)) for defineback, even if
 #       we don't run the actual definegeometry2d executable.
+#       this could lead to some inconsistencies...
 run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
-dg2d_kwargs = setup_kwargs.get("definegeometry2d", {})
+dg2d_kwargs = setup_kwargs.get("definegeometry2d", {}) # dict of options for dg2d scripts.
 
 # Recycling coefficient
 recyc = dg2d_kwargs.get("recyc", 0.98)
@@ -117,13 +140,19 @@ walltemp = dg2d_kwargs.get("walltemp",300.0)
 # When refining mesh, this is the largest segment permitted along the wall [m]
 # max distance along limiter for triangulation. Roughly sets the spatial res.
 dlim_max = dg2d_kwargs.get("dlim_max", 0.02)
+minarea = dg2d_kwargs.get("minarea",-1)
+# This is an optional point on/near the limiter to index as 0.
+# This can assist with defining distributed sources using the "start:end" method.
+# Set to None to disable.
+# Set to (1.0128, 1.2053) [m] for the upper HFS edge.
+RZlim_start = dg2d_kwargs.get("RZlim_start", None)
 
 # From the degas2/scripts/dg2d.py
 geo_kw = dict(recyc_coef=recyc, Twall=walltemp,dlim_max=dlim_max,
               clockwise=True, # Not sure why this is True, default is False.
-              RZlim_start=[1.0128, 1.2053], # Upper HFS point on limiter.
+              RZlim_start=RZlim_start, # Upper HFS point on limiter.
+              minarea=minarea,
          )
-# [AA] George will change this to generate rho instead of psifunc
 # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
 # outputs = ['wallfile.txt','dg2d.in']
 psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
@@ -162,15 +191,20 @@ if run_defineback:
     db_kwargs = setup_kwargs.get("defineback", {})
     # The number of flight samples
     Nsample = db_kwargs.get("Nsample", 1000)
-    source_strength = db_kwargs.get("source_strength", 1.e24) # [m2/s]
+    source_strength = db_kwargs.get("source_strength", 1.e24) # [/m2/s]
     stratum = db_kwargs.get("stratum", 3)   
     segment = db_kwargs.get("segment","*")
-
+    # Option to pass a sourcefile.txt directly...
+    use_sourcefile = db_kwargs.get("use_sourcefile",False)
+    if use_sourcefile:
+        check_for_file("sourcefile.txt", fail=True)
+        source_strength = None # disables the source-by-segment methods in the Source class.
+        
     source_kw = dict(rootspecies="D+", #  
-                     strength=source_strength, # [m2/s]
+                     strength=source_strength, # [/m2/s]
                      stratum=stratum, # 
                      segment=segment, #
-                    )
+                     )
     # outputs = ['sourcefile.txt'] CURRENTLY ONLY ONE GROUP IS SUPPORTED,
     #   may only exist for large numbers of source segments.
     sgroup = source.Source(Nsample,"plate","D",**source_kw)

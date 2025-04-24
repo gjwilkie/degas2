@@ -4,7 +4,7 @@ class Source:
     """ Class managing DEGAS2 sources.
     """
     def __init__(self,nflights,stype,species,rootspecies=None,specify_flux=True,sourcefile="sourcefile.txt",
-                 sourcefile_fmt="tabular",pufftemp=None,strength=None,stratum=None,segment=None):
+                 sourcefile_fmt="tabular",pufftemp=None,puffexp=None,strength=None,stratum=None,segment=None,):
         """ Initialization of DEGAS Source class.
             Args:
                 nflights: (int) Number of flights
@@ -27,6 +27,17 @@ class Source:
         self.nflights = nflights
         self.type = stype
         self.species = species
+        # Sanitize input,
+        if stype == "vol_source":
+            strength=None
+            sourcefile_fmt='row'
+            self.geom = 'volume'
+            pufftemp=None
+            puffexp=None
+        else:
+            self.geom = 'surface'
+        #
+        self.sourcefile_fmt=sourcefile_fmt
         #
         if not rootspecies:
             self.rootspecies = self.species
@@ -42,6 +53,11 @@ class Source:
             self.pufftemp = pufftemp
         else:
             self.pufftemp=None
+        #
+        if puffexp:
+            self.puffexp = puffexp
+        else:
+            self.puffexp = None
         # 
         if strength:
             self.sourcefile = None
@@ -174,7 +190,7 @@ def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
         source = source_groups[i]
         f.write("new_source_group\n")
         f.write(f"  source_type {source.type}\n")
-        f.write("  source_geom surface\n")
+        f.write(f"  source_geom {source.geom}\n")
         f.write(f"  source_species {source.species}\n")
         f.write(f"  source_root_sp {source.rootspecies}\n")
         f.write(f"  {source.specify_units}\n")
@@ -186,6 +202,8 @@ def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
             f.write(f"  source_strength {source.strength}\n")
         if source.pufftemp:
             f.write(f"  source_puff_temp {source.pufftemp}\n")
+        if source.puffexp:
+            f.write(f"  source_puff_exponent {source.puffexp}\n")
         f.write(f"  source_nflights {int(source.nflights)}\n")
         f.write("end_source_group\n")
     f.close()

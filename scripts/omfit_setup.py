@@ -74,6 +74,7 @@ profiles.set_auto_mask(False) # makes variables come in as np.array rather than 
 #   It is probably better to load the gEQDSK here and put zero at the maximum psi_n in the vessel?
 psi_data = list(profiles["psi_n"][:]) + [2.0]
 ne_data = list(profiles["n_e"][:]) + [0.] # [/m3]
+ni_data = list(profiles["n_i"][:]) + [0.] # [/m3]
 Te_data = list(profiles["T_e"][:]) + [0.] # [eV]
 Ti_data = list(profiles["T_i"][:])  + [0.]# [eV]
 # Toroidal angular rotation data, V_tor = R*omega
@@ -172,11 +173,18 @@ else:
 # DEGAS2 defineback,
 run_defineback = setup_kwargs.get("run_defineback", True)
 if run_defineback:
+    db_kwargs = setup_kwargs.get("defineback", {})
+    
+    # Define the background plasma,
     # From the degas2/scripts/defineback.py script,
-    # Defines the background plasma,
-    # outputs = ['plasmafile.txt']
-    back_kw = dict(psi_data=psi_data, rot_data=omega_data)
-    defineback.generate_plasma_file_through_psi(ne_data,Te_data,Ti_data, psifunc,**back_kw)
+    custom_plasmafile = db_kwargs.get("custom_plasmafile",False)
+    if custom_plasmafile:
+        print(f"INFO (omfit_setup): Using custom 'plasmafile.txt.")
+        check_for_file("plasmafile.txt", fail=True)
+    else:
+        # outputs = ['plasmafile.txt']
+        back_kw = dict(psi_data=psi_data, rot_data=omega_data, ni_data=ni_data)
+        defineback.generate_plasma_file_through_psi(ne_data, Te_data, Ti_data, psifunc,**back_kw)
 
     # From the degas2/scripts/source.py script,
     # Source Option #1: Puff,
@@ -188,26 +196,38 @@ if run_defineback:
     #     This treats the source as if it's recycling, same flux as above, energy distribution of produced neturals
     #     are determined by ions near the wall and the recycling properies of the PFC.
     
-    db_kwargs = setup_kwargs.get("defineback", {})
-    # The number of flight samples
-    Nsample = db_kwargs.get("Nsample", 1000)
-    source_strength = db_kwargs.get("source_strength", 1.e24) # [/m2/s]
-    stratum = db_kwargs.get("stratum", 3)   
-    segment = db_kwargs.get("segment","*")
-    # Option to pass a sourcefile.txt directly...
-    use_sourcefile = db_kwargs.get("use_sourcefile",False)
-    if use_sourcefile:
-        check_for_file("sourcefile.txt", fail=True)
-        source_strength = None # disables the source-by-segment methods in the Source class.
+    # Unpack args for the source.Source class,
+    n_flights = db_kwargs.get("n_flights", 1000)
+    source_type = db_kwargs.get("source_type",'plate')
+    species = "D"
+    if source_type == 'plate':
+        rootspecies="D+"
+    else:
+        rootspecies=species
+    if source_type == "vol_source":
+        # Force certain settings,
+        db_kwargs['custom_sourcefile'] = True # must use sourcefile, forces the check for sourcefile.txt later.
         
-    source_kw = dict(rootspecies="D+", #  
-                     strength=source_strength, # [/m2/s]
-                     stratum=stratum, # 
-                     segment=segment, #
+    # Unpack kwargs for the source.Source class,
+    source_kw = dict(rootspecies=rootspecies,
+                     specify_flux=db_kwargs.get("specify_flux", True),
+                     pufftemp=db_kwargs.get("puff_temp",None),
+                     puffexp=db_kwargs.get("puff_exp", None),
+                     strength=db_kwargs.get("source_strength", 1.e23), # [/m2/s] when specify_flux in 'db.in'
+                     stratum=db_kwargs.get("stratum", 3),
+                     segment=db_kwargs.get("segment", "*"), 
                      )
+    
+    # Option to pass a sourcefile.txt directly...
+    custom_sourcefile = db_kwargs.get("custom_sourcefile",False)
+    if custom_sourcefile:
+        print(f"INFO (omfit_setup): Using custom 'sourcefile.txt.")
+        check_for_file("sourcefile.txt", fail=True)
+        source_kw["strength"] = None # disables the source-by-segment methods in the Source class.
+        
     # outputs = ['sourcefile.txt'] CURRENTLY ONLY ONE GROUP IS SUPPORTED,
     #   may only exist for large numbers of source segments.
-    sgroup = source.Source(Nsample,"plate","D",**source_kw)
+    sgroup = source.Source(n_flights,source_type,species,**source_kw)
     # outputs = ['db.in']
     source.write_db_input([sgroup])
     # >>>>

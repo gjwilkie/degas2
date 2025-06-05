@@ -3,6 +3,7 @@
 # 
 # SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN dir. 
 #        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
+#
 # The user should run the following commands (on omega) before executing this scipt,
 # >> module purge
 # >> module load degas2
@@ -199,17 +200,17 @@ if run_defineback:
     # Unpack args for the source.Source class,
     n_flights = db_kwargs.get("n_flights", 1000)
     source_type = db_kwargs.get("source_type",'plate')
-    species = "D"
-    if source_type == 'plate':
-        rootspecies="D+"
-    else:
-        rootspecies=species
+    source_species = db_kwargs.get("source_species", "D")
+    source_root_species = db_kwargs.get("source_species", source_species+"+")
+    if source_type in ['vol_source','puff']:
+        source_root_species = source_species
+
     if source_type == "vol_source":
         # Force certain settings,
         db_kwargs['custom_sourcefile'] = True # must use sourcefile, forces the check for sourcefile.txt later.
         
     # Unpack kwargs for the source.Source class,
-    source_kw = dict(rootspecies=rootspecies,
+    source_kw = dict(rootspecies=source_root_species,
                      specify_flux=db_kwargs.get("specify_flux", True),
                      pufftemp=db_kwargs.get("puff_temp",None),
                      puffexp=db_kwargs.get("puff_exp", None),
@@ -227,7 +228,7 @@ if run_defineback:
         
     # outputs = ['sourcefile.txt'] CURRENTLY ONLY ONE GROUP IS SUPPORTED,
     #   may only exist for large numbers of source segments.
-    sgroup = source.Source(n_flights,source_type,species,**source_kw)
+    sgroup = source.Source(n_flights,source_type,source_species,**source_kw)
     # outputs = ['db.in']
     source.write_db_input([sgroup])
     # >>>>

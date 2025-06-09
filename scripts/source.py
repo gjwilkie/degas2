@@ -4,7 +4,7 @@ class Source:
     """ Class managing DEGAS2 sources.
     """
     def __init__(self,nflights,stype,species,rootspecies=None,specify_flux=True,sourcefile="sourcefile.txt",
-                 sourcefile_fmt="tabular",pufftemp=None,puffexp=None,strength=None,stratum=None,segment=None,):
+                 sourcefile_fmt="row",pufftemp=None,puffexp=None,strength=None,stratum=None,segment=None,):
         """ Initialization of DEGAS Source class.
             Args:
                 nflights: (int) Number of flights

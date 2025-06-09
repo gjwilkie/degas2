@@ -1,10 +1,10 @@
 # Created on Nov. 21, 2024 by qpratt
-# Example degas2 run based on the micerscript.py from A. Angulo and G. Wilkie
+# Example degas2 setup based on the micerscript.py from A. Angulo and G. Wilkie
 # 
 # SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN dir. 
 #        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
 #
-# The user should run the following commands (on omega) before executing this scipt,
+# The user should run the following commands (on the omega cluster at GA) before executing this scipt,
 # >> module purge
 # >> module load degas2
 # This will set up the necessary env. vars and modify the path.
@@ -132,7 +132,8 @@ else:
 #       this could lead to some inconsistencies...
 run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
 dg2d_kwargs = setup_kwargs.get("definegeometry2d", {}) # dict of options for dg2d scripts.
-
+# Whether or not we've been provided with a custom mesh, 
+custom_tri = dg2d_kwargs.get("custom_tri", False)
 # Recycling coefficient
 recyc = dg2d_kwargs.get("recyc", 0.98)
 # Wall Material
@@ -155,9 +156,41 @@ geo_kw = dict(recyc_coef=recyc, Twall=walltemp,dlim_max=dlim_max,
               RZlim_start=RZlim_start, # Upper HFS point on limiter.
               minarea=minarea,
          )
-# This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
-# outputs = ['wallfile.txt','dg2d.in']
-psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
+if custom_tri:
+    tri_basename = dg2d_kwargs.get("custom_tri_basename", "flux_surfaces")
+    # check for necessary files,
+    for ext in [".ele", ".node"]:
+        check_for_file(tri_basename+ext, fail=True)
+    # generate the geometry files,
+    # this script will write, 
+    # 1. the dg2d.in file
+    # 2. the wallfile. 
+    from xgcpost import write_geometry_files
+    write_geometry_files(material=material,
+        recyc=recyc,
+        walltemp=walltemp,
+        use_xgc_mesh=True,
+        polygonfilename="polygons.nc",
+        trifile_base=tri_basename,
+        make_plot=False,
+    )
+    # For things to work properly we need to provide a psi_func interpolant.
+    # In the future we should modify the xgcpost.write_geometry_files() function
+    # to read psi_n as an attr of the Triangle .node file. 
+    # Then we can make a better interpolant.
+    from geomutils import read_geqdsk
+    g = read_geqdsk(geqdsk_file)
+    rgrid = g.rgrid
+    zgrid = g.zgrid
+    # Defines psi_n(R,Z) = (psi - min(psi))/(max(psi) - min(psi)), Normalized poloidal flux.
+    psi_rz = (g.psirz-g.ssimag)/(g.ssibry-g.ssimag)
+    psifunc = lambda R,Z : interpolate.RectBivariateSpline(rgrid, zgrid, psi_rz.T)(R, Z)[0]
+
+else:
+    # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
+    # the psifunc is used later when we run defineback.
+    # outputs = ['wallfile.txt','dg2d.in']
+    psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
 if run_definegeometry2d:
     # >>>>
     # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]

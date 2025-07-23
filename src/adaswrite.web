@@ -26,19 +26,25 @@ process.
 @I string.hweb
 @I xsection.hweb
 @I netcdf.hweb
+@I mpi.hweb
 
 @ The unnamed module.
 
 @a
       program adaswrite
       implicit_none_f77
+      mp_common
       implicit_none_f90
+      mp_decls
 
       integer nargs
       character*FILELEN inputfile
 
       sy_decls
 
+@#if MPI
+      mpi_init
+@#endif
       nargs=arg_count()
       if (nargs != 1) then
          assert(' Command line must specify an input file' == ' ')
@@ -52,6 +58,9 @@ process.
 
       call adas_write(inputfile)
 
+@#if MPI
+      mpi_end
+@#endif
       stop
       end
       

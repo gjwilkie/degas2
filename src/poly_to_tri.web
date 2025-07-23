@@ -29,6 +29,7 @@ file, and the zone number appears in the last column of the
 @I geometry2d.hweb
 @I zone.hweb
 @I sector.hweb
+@I mpi.hweb
 
 @ The unnamed module.
 
@@ -53,6 +54,7 @@ file, and the zone number appears in the last column of the
       define_varp(triangle_zone,INT,tri_ind)
 
       implicit_none_f77
+      mp_common
       zn_common
       sc_common
       g2_common
@@ -81,7 +83,11 @@ file, and the zone number appears in the last column of the
       g2_ncdecl
       nc_decls
       st_decls
+      mp_decls
 
+@#if MPI
+      mpi_init
+@#endif
       num_nodes=0
       num_tri=0
       var_alloc(nodes)
@@ -268,6 +274,9 @@ file, and the zone number appears in the last column of the
       var_free(triangles)
       var_free(triangle_zone)
 
+@#if MPI
+      mpi_end
+@#endif
       stop
       end
 

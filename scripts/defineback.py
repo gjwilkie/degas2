@@ -10,10 +10,32 @@ from importlib import reload
 import matplotlib.tri as tri
 import source
 
+class DB:
+    """ 
+    Class representing all input for defineback
+
+    Attributes:
+        sgroups: list of Source type
+    """
+
+
+    def __init__(self):
+        """
+        Constructor for defineback object. Generates for minimal defaults.
+        """
+        self.sgroups = []
+        self.ne_zone = []
+        self.Te_zone = []
+        self.Ti_zone = []
+        self.ui_zone = None
+    
+    def write_files(self):
+        write_plasmafile(self.ne_zone,self.Te_zone,self.Ti_zone,self.ui_zone)
+
+
 # Populates plasma density and temperature by zone. Depending on if the point (zone center) is inside the separatrix,
 # this will either interpolate based on psi, or interpolate on a 2D table based on more general R and Z data
 def get_zone_plasma_data_through_psi_inside_sep(zone_coords,R_outside,Z_outside,ne_outside,Te_outside,psifunc,R_inside,ne_inside,Te_inside,R_sep,Z_sep,hfs_R_lim=-1,hfs_fac=1.0,lfs_R_lim=-1,hfs_ne=None,hfs_Te=None,plot=False):
-
     psi_data = []
 
     for R in R_inside:

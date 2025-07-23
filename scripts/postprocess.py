@@ -3,7 +3,6 @@ import numpy as np
 import sys
 import netCDF4 as nc
 import matplotlib.tri as tri
-import polygon
 from importlib import reload
 from matplotlib import ticker
 from scipy.spatial import Delaunay
@@ -65,6 +64,10 @@ def get_output(tallyname,sgroup=None,outputfilename="output.nc",tallyfilename="t
         error_raw = np.array(outputdata["out_post_grp"][sgroup,base_idx:base_idx+Ndat_tally,1])
     outdata = np.squeeze(np.reshape(outdata_raw,np.append(Ngroup,tally_indices),order='F'))
     error = np.squeeze(np.reshape(error_raw,np.append(Ngroup,tally_indices),order='F'))
+
+    outputdata.close()
+    geomdata.close()
+    tallydata.close()
 
     if with_err:
         return outdata, error

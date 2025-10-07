@@ -119,18 +119,40 @@ def gen_cones(x0,x1):
    return coeffs
 
 def orient_surfaces(coeffs, points):
-    eps = 1.0e-10
+    eps = 1.0e-16
 
+    # Planes have no coefficients on x^2 or y^2
     planecond = np.abs(coeffs[:,4]) < eps
+
+    # Only cones have a coefficient on z^2, which will be -1
+    conecond = np.abs(coeffs[:,6]+1.0) < eps
+
+    # Cylinders are neither planes nor cones
+    cylcond = np.logical_not(np.logical_or(planecond,conecond))
+
     b = 0.5*coeffs[:,3]
 
-    cone_r = np.where(points[:,1] > b, (points[:,1] - 0.5*coeffs[:,3])/np.sqrt(coeffs[:,4]),-(points[:,1] - 0.5*coeffs[:,3])/np.sqrt(coeffs[:,4]) )
-    surfpoint = np.where(planecond,-coeffs[:,0],cone_r)
+    # How to determine sign of surface relevant for each point:
+    #  - Find a point on the surface (cone_r) at the same Z as the point
+    #  - If R of the input point is > the surface point's R, it's outside the surface.
+    #  - If surface is a plane, just compare Z(point) to Z(surface)
+
+    # If surface is a cone, use R at common Z as the coordinate to compare
+    #  otherwise (eventually, plane only), use Z0
+    m = np.where(conecond, np.sqrt(coeffs[:,4]), np.ones_like(b) )
+    surfpoint = np.where(conecond,  np.abs(points[:,1] - b)/m,-coeffs[:,0])
+
+    # If surface is a cylinder, use R of surface to compare
+    c0 = np.where(cylcond,-coeffs[:,0],np.ones_like(b))
+    surfpoint = np.where(cylcond,np.sqrt(c0), surfpoint)
+
+    # What is this for a cylinder: b=0, m=1, so cone_r is Z(point)
+    # Should instead use c0 to get either b^2 or R^2
 
     if np.any( np.logical_or(np.isnan(surfpoint), np.isinf(surfpoint))):
-        print("ERROR: surface points to be compared is populated with divide-by-zero, which should have been ruled out by plane condition.")
+        print("ERROR: surface points to be compared is populated with NaN, which should have been ruled out by plane condition.")
 
-    sign_cond = np.where(planecond,points[:,1]>surfpoint,points[:,0] > cone_r)
+    sign_cond = np.where(planecond,points[:,1]>surfpoint,points[:,0] > surfpoint)
 
     return np.where(sign_cond, 1, -1)
 

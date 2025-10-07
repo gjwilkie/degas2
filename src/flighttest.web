@@ -51,20 +51,18 @@ its original purpose as a geometry test routine.
 
       integer standalone      // Local
 
-@#if 0
-      mpi_init
-@#else
+@#if MPI
       standalone=TRUE
       call degas2_mpi_init(standalone,mpi_comm_world)
+      if (mpi_master) call readfilenames
+@#else
+      call readfilenames
 @#endif
 
-      if (mpi_master) call readfilenames
       call degas_init       // Eventually separate out |nc_read_background|
       call bgk_flighttest
 
-@#if 0
-      mpi_end
-@#else
+@#if MPI
       call degas2_mpi_end(standalone)
 @#endif
       

@@ -289,6 +289,42 @@ lihe_00_elastic He + Li => He + Li
 D2ROOT/data/lihe_00_elastic.nc
 elastic
 
+Hydrogen molecule dissociation with CR effects
+h2dis_jcr e + H2 -> e + H + H
+D2ROOT/data/H2_CR_model/h2dis_jcr.nc
+dissoc
+
+Hydrogen molecule dissociation with CR and vib. effects
+h2disg_jcr e + H2 -> e + H + H
+D2ROOT/data/H2_CR_model/h2disg_jcr.nc
+dissoc
+
+Molecular hydrogen ionization with CR effects
+h2ion_jcr e + H2 -> e + H2+ + e
+D2ROOT/data/H2_CR_model/h2ion_jcr.nc
+ionize
+
+Molecular hydrogen dissociative ionization with CR effects
+h2dision_jcr e + H2 -> e + H+ + H + e
+D2ROOT/data/H2_CR_model/h2dision_jcr.nc
+dissoc
+
+Molecular hydrogen ion dissociation with CR effects
+h2pdis_jcr e + H2+ -> e + H+ + H 
+D2ROOT/data/H2_CR_model/h2pdis_jcr.nc
+dissoc
+
+Molecular hydrogen ion dissociative ionization with CR effects
+h2pdision_jcr e + H2 -> e + H+ + H + e
+D2ROOT/data/H2_CR_model/h2pdision_jcr.nc
+dissoc
+
+molecular hydrogen ion dissociative recombination with CR effects
+h2pdisrec_jcr e + H2+ -> H + H *
+D2ROOT/data/h2pdisrec.nc
+dissoc_rec
+
+
 
 
 

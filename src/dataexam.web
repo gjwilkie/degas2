@@ -164,6 +164,7 @@ selection dialog.
 @I particle.hweb
 @I string.hweb
 @I materials.hweb
+@I mpi.hweb
 
 @ The main program.
 
@@ -172,8 +173,11 @@ selection dialog.
       implicit_none_f77
       xs_common
       rc_common
+      mp_common
       implicit_none_f90
+      mp_decls
       xs_decls
+
       character*LINELEN line    // Local
       character*FILELEN tempfile
       character*rc_sy_len symbol
@@ -198,6 +202,9 @@ selection dialog.
       @<Memory allocation interface@>
       st_decls
 
+@#if MPI
+      mpi_init
+@#endif
       call readfilenames
       call nc_read_reactions
       write(stdout,*)
@@ -496,6 +503,9 @@ loop1: continue
 
 eof:  continue
 
+@#if MPI
+      mpi_end
+@#endif
       stop
       end
 

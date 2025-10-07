@@ -1449,8 +1449,8 @@ be other requirements as well.
 @m triangulate_polygon 2
 @m triangulate_to_zones 3
 
-@m max_triangles 100000 // max number of triangles
-@m max_grp_sectors 80000
+@m max_triangles 1000000 // max number of triangles
+@m max_grp_sectors 1000000
 
 @m increment_num_elements       num_elements++;
       dim_elements=max(dim_elements,num_elements);

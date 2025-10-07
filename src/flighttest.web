@@ -55,7 +55,7 @@ its original purpose as a geometry test routine.
       mpi_init
 @#else
       standalone=TRUE
-      call degas2_mpi_init(standalone,MPI_COMM_WORLD)
+      call degas2_mpi_init(standalone,mpi_comm_world)
 @#endif
 
       if (mpi_master) call readfilenames

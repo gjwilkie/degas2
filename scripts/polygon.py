@@ -13,6 +13,8 @@ class Polygon:
         vertices: A list of points representing a closed polygon. Accessed through add_vertex method.
         id: Integer identification for the polygon. Usually corresponds to "stratum.
         alongwall: Boolean for whether this is an external (wall) point. Incomplete feature.
+        vacuum: Boolean for whether this polygon represents a vacuum zone
+        split: Flag for whether this polygon is intended to split into multiple zones
     """
 
     numPolygons = 0 
@@ -33,6 +35,8 @@ class Polygon:
         if increment:
             Polygon.numPolygons += 1
         self.alongwall = False
+        self.vacuum = False
+        self.split = False
 
     # Polygons are equal if their vertices are equal
     def __eq__(self,other):
@@ -43,6 +47,9 @@ class Polygon:
 
     def add_vertex(self,vertex):
         self.vertices.append(vertex)
+
+    def split_into_zones(self):
+        self.split = True
 
     def clear_numPolygon():
         Polygon.numPolygons = 0
@@ -223,8 +230,8 @@ class Polygon:
         written_ids = []
         if clockwise:
             f.write("  wall "+str(wallid+1)+" "+
-                "0 0 "+"\n")
-            written_ids.append(0)
+                str(wallnodes[0].id)+" "+str(wallnodes[0].id)+"\n")
+            written_ids.append(wallnodes[0].id)
 
             for node in wallnodes[-1:0:-1]:
                 if not node.id in written_ids:
@@ -365,9 +372,20 @@ class Polygon:
                 newpoly = Polygon(increment=False,id=self.id)
                 for i in range(0,Nvertex):
                     newpoly.add_vertex(self.vertices[Nvertex-i-1])
-                self = newpoly
+                self.vertices = newpoly.vertices
 
         return result
+
+    def get_first_idx(self):
+        # Start with vertex closest to origin
+        startidx = -1
+        Nvertex = len(self.vertices)
+        dist = 9.0e30
+        for i in range(0,Nvertex):
+            if np.linalg.norm(self.vertices[i].coords) < dist:
+                dist = np.linalg.norm(self.vertices[i].coords)
+                startidx = i
+        return startidx
 
             
     def build_aux_wall_polygons(self,firstid,thickness=0.005):
@@ -389,48 +407,129 @@ class Polygon:
         newvertices = []
         outpoly = Polygon()
 
-        self.is_clockwise(force=True)
         Nvertex = len(self.vertices)
 
-        # Start with vertex closest to origin
-        startidx = -1
-        dist = 9.0e30
-        for i in range(0,Nvertex):
-            if np.norm(self.vertices[i].coords) < dist:
-                dist = np.norm(self.vertices[i].coords)
-                startidx = i
+#        startidx = self.get_first_idx()
+#        startidx = 0
 
-        v1 = self.vertices[startidx]
-        v2 = self.vertices[np.mod(startidx+1,Nvertex)]
-        normal = np.zeros(2)
-        normal[0] = v1.coords[1]-v2.coords[1]
-        normal[1] = v2.coords[0]-v1.coords[0]
-        normal = normal / np.norm(normal)
-        newvertices.append(Vertex(firstid,v1[0]+thickness*normal[0],v1[1]+thickness*normal[1]))
-        outpoly.add_vertex(newvertices[-1])
+#        v1 = self.vertices[startidx]
+#        if self.is_clockwise():
+#            v0 = self.vertices[np.mod(startidx-1,Nvertex)]
+#            v2 = self.vertices[np.mod(startidx+1,Nvertex)]
+#        else:
+#            v2 = self.vertices[np.mod(startidx-1,Nvertex)]
+#            v0 = self.vertices[np.mod(startidx+1,Nvertex)]
+#
+#        diff1 = np.array(v0.coords) - np.array(v1.coords)
+#        diff2 = np.array(v2.coords) - np.array(v1.coords)
+#
+#        diff1 = diff1/np.linalg.norm(diff1)
+#        diff2 = diff2/np.linalg.norm(diff2)
+#
+#        diff3 = diff1 + diff2
+#        if np.linalg.norm(diff3) < 1.0e-3:
+#            d1_3d = np.array([diff1[0],diff1[1],0.0])
+#            phiunit = np.array([0.0,0.0,1.0])
+#            diff3 = np.cross(d1_3d,phiunit)[0:2]
+#        else:
+#            diff3 = -diff3/np.linalg.norm(diff3)
+#
+        if not self.is_clockwise():
+            thickness = -thickness 
+#
+##        alpha = np.arctan2(diff2[1],diff2[0]) - 0.5*np.arccos( np.dot(diff1,diff2)/(np.linalg.norm(diff1)*np.linalg.norm(diff2))) - np.pi
+##        alpha = np.arccos(diff3
+#
+##        newvertices.append(Vertex(firstid,v1.coords[0]+thickness*np.cos(alpha),v1.coords[1]+thickness*np.sin(alpha)))
+#        newvertices.append(Vertex(firstid,v1.coords[0]+thickness*diff3[0],v1.coords[1]+thickness*diff3[1]))
+#        outpoly.add_vertex(newvertices[-1])
             
-        # Go around plasma polygon and accumulate new vertices offset outward by thickness
-        for i in range(1,Nvertex):
-            v1 = self.vertices[i]
-            v2 = self.vertices[np.mod(i+1,Nvertex)]
-            normal = np.zeros(2)
-            normal[0] = v1.coords[1]-v2.coords[1]
-            normal[1] = v2.coords[0]-v1.coords[0]
-            normal = normal / np.norm(normal)
+        # Go around plasma polygon and accumulate new vertices 
+        # offset outward by thickness. "Outward" is defined in a vector sense:
+        # find the bisecting vector between adjacent segments and negate it.
+        for i in range(0,Nvertex):
 
-            newvertices.append(Vertex(firstid+i,v1[0]+thickness*normal[0],v1[1]+thickness*normal[1]))
+            # v0, v1, and v2 are in order around the wall polygon.
+            # Parity is accounted for by the sign on thickness.
+            v1 = self.vertices[i]
+            if self.is_clockwise():
+                v0 = self.vertices[np.mod(i-1,Nvertex)]
+                v2 = self.vertices[np.mod(i+1,Nvertex)]
+            else:
+                v2 = self.vertices[np.mod(i-1,Nvertex)]
+                v0 = self.vertices[np.mod(i+1,Nvertex)]
+
+            # diff1 and diff2 are unit vectors pointing away form v1
+            diff1 = np.array(v0.coords) - np.array(v1.coords)
+            diff2 = np.array(v2.coords) - np.array(v1.coords)
+            diff1 = diff1/np.linalg.norm(diff1)
+            diff2 = diff2/np.linalg.norm(diff2)
+
+            # Sum of two unit vectors bisects the angle between them
+            bisect = diff1 + diff2
+
+            # Now, determine if the bisection points "inward" or "outward"
+            # For clockwise (default), "inward" is "to the right" of diff2.
+            convex = np.sign(np.cross(diff1,diff2))
+            
+
+            if np.linalg.norm(bisect) < 1.0e-6:
+                # For colinear or nearly colinear points,
+                # the outward unit vector is the cross product between diff1
+                # and phi=(r cross z). 
+#                d1_3d = np.array([diff1[0],diff1[1],0.0])
+#                phiunit = np.array([0.0,0.0,1.0])
+#                outward = convex*np.cross(d1_3d,phiunit)[0:2]
+                outward = [diff1[1],-diff1[0]]
+            else:
+                # Otherwise, outward is the negation of the bisecting vector.
+                outward = -convex*bisect/np.linalg.norm(bisect)
+
+#            print("v1 = ",v1.coords)
+#            print("  v0 = ",v0.coords)
+#            print("  v2 = ",v2.coords)
+#            print("  diff1 = ",diff1)
+#            print("  diff2 = ",diff2)
+#            print("    outward = ",outward)
+   
+#            alpha = np.arctan2(diff2[1],diff2[0]) - 0.5*np.arccos( np.dot(diff1,diff2)/(np.linalg.norm(diff1)*np.linalg.norm(diff2))) - np.pi
+    
+#            newvertices.append(Vertex(firstid+i,v1.coords[0]+thickness*np.cos(alpha),v1.coords[1]+thickness*np.sin(alpha)))
+            newvertices.append(Vertex(firstid+i,v1.coords[0]+thickness*outward[0],v1.coords[1]+thickness*outward[1]))
             outpoly.add_vertex(newvertices[-1])
 
+        # Reorder outpoly so that it starts with the appropriate segment
+        
+        lmin = 9e30
+        idxmin=-1
+        for i in range(0,Nvertex):
+            rmid = 0.5* (outpoly.vertices[i].coords[0] + outpoly.vertices[np.mod(i+1,Nvertex)].coords[0])
+            zmid = 0.5* (outpoly.vertices[i].coords[1] + outpoly.vertices[np.mod(i+1,Nvertex)].coords[1])
+            length= np.sqrt(rmid**2+zmid**2)
+            if length < lmin:
+                lmin = length
+                idxmin = i
+
+        newoutpoly = Polygon(increment=False)
+        for i in range(0,Nvertex):
+            newoutpoly.add_vertex( outpoly.vertices[np.mod(idxmin+i,Nvertex)] )
+ 
         # Build new polygons
         for i in range(0,Nvertex):
             newpoly = Polygon()
-            newpoly.add_vertex(self.vertices[np.mod(i+1,Nvertex)])
-            newpoly.add_vertex(self.vertices[i])
-            newpoly.add_vertex(newvertices[i])
-            newpoly.add_vertex(newvertices[np.mod(i+1,Nvertex)])
+            if self.is_clockwise():
+                newpoly.add_vertex(self.vertices[np.mod(i+1,Nvertex)])
+                newpoly.add_vertex(self.vertices[i])
+                newpoly.add_vertex(newvertices[i])
+                newpoly.add_vertex(newvertices[np.mod(i+1,Nvertex)])
+            else:
+                newpoly.add_vertex(self.vertices[i])
+                newpoly.add_vertex(self.vertices[np.mod(i+1,Nvertex)])
+                newpoly.add_vertex(newvertices[np.mod(i+1,Nvertex)])
+                newpoly.add_vertex(newvertices[i])
             aux_polys.append(newpoly)
 
-        return aux_polys, outpoly, newvertices
+        return aux_polys, newoutpoly, newvertices
 
 # A surface is also an ordered set of vertices, but can be open or closed
 # The vertices that make up various surfaces are combined to make a polygon
@@ -732,7 +831,7 @@ def purge_invalid_nodes(allnodes,valid_tris):
             valid_nodes.append(node)
     return valid_nodes
 
-def find_next_wall_node(current_node,prev_node,wallnodes,walltriangles,first):
+def find_next_wall_node(current_node,prev_node,wallnodes,walltriangles,first,check_clockwise=True):
 
     # Collect triangles that share current_node
     adjacent_wall_triangles = []
@@ -743,6 +842,7 @@ def find_next_wall_node(current_node,prev_node,wallnodes,walltriangles,first):
     n_adjacent_triangles = len(adjacent_wall_triangles)
 
 #    print("current_node = %d"%current_node.id)
+#    print("n_adjacent_trianges = %d"%n_adjacent_triangles)
 
     next_node = -1
     # Loop through the adjacent wall triangles that share the current node
@@ -751,6 +851,11 @@ def find_next_wall_node(current_node,prev_node,wallnodes,walltriangles,first):
         # Create list of adjacent triangles that excludes the one under consideration
         other_adjacent_triangles = copy.deepcopy(adjacent_wall_triangles)
         other_adjacent_triangles.remove(tri)
+
+#        print("len(other_adjacent_trianges = %d"%len(other_adjacent_triangles))
+#        print(other_adjacent_triangles[0].vertices[0].id)
+#        print(other_adjacent_triangles[0].vertices[1].id)
+#        print(other_adjacent_triangles[0].vertices[2].id)
         
 #        other_adjacent_triangle_vertices = []
 #        other_adjacent_triangle_vertices = []
@@ -774,19 +879,27 @@ def find_next_wall_node(current_node,prev_node,wallnodes,walltriangles,first):
 
             segment_shared_with_another_triangle = False
             for othertri in other_adjacent_triangles:
+                #print("segment[1] = %d"%segment[1].id)
+                #print("othertri.vertices = [%d,%d,%d]"%(othertri.vertices[0].id,othertri.vertices[1].id,othertri.vertices[2].id))
                 if segment[1] in othertri.vertices:
                     segment_shared_with_another_triangle = True
                     if not segment[0] in othertri.vertices[:]:
                         sys.exit("Something's very wrong in find_next_wall_node.")
+                #print("point %d-%d shared with another triangle %d"%(segment[0].id,segment[1].id,int(segment_shared_with_another_triangle)))
+            #print("point %d in wallnodes? %d"%(segment[1].id,int(segment[1] in wallnodes)))
+            #print("not shared_with_another_triangle? %d"%(not segment_shared_with_another_triangle))
+            #TODO: fix clockwise check logic
             if (segment[1] in wallnodes) and (not segment_shared_with_another_triangle):
                 if first:
                     # Ensure we start by going counterclockwise from the low field side
-                    if segment[1].coords[1] < current_node.coords[1]:
+                    if (segment[1].coords[1] < current_node.coords[1]) or not check_clockwise:
                         next_node=segment[1]
                 elif (segment[1] != prev_node):
-                    if (next_node != -1):
+                    if (next_node != -1) and check_clockwise:
                         sys.exit("Found multiple candidates for next_node. Logic of code fails.")
                     next_node = segment[1]
+
+
 
     if next_node == -1:
         sys.exit("Could not find a candidate next_node.")

@@ -6,8 +6,391 @@ from importlib import reload
 import geomutils
 import scipy.interpolate as interpolate
 import netCDF4 as nc
-#import matplotlib.tri.triangulation as mtri
 import matplotlib.tri as mtri
+import collections
+import subprocess
+#from tqdm import tqdm
+
+class DG2D:
+    """ 
+    Class representing all input for definegeometry2d.
+    Conventions: First N=len(polys) zones are the internal plasma and vacuum zones, bounded by Nwall=len(wallpoly.vertices). 
+    Strata are labelled sequentially starting from 1. Next Nwall zones (and strata) are the embedded auxiliary zones.
+    Segments around closed wall polygon are indexed corresponding to the first vertex of the segment when traversing clockwise.
+
+    Steps to building the appropriate data:
+    1a. Define the limiter polygon. Triangulation will be done automatically. Option to specify minimum wall triangle size.
+    OR
+    1b. Import triangular mesh. Limiter shape will be inferred.
+    2. Specify wall properties: material, temperature, recycling coefficient. Can be specified by segment.
+    3. Write files
+
+    Attributes:
+        nodes: list of Vertices, each representing an entry in the wall file from which to build the geometry
+        polys: list of Polygons, each representing a plasma or vacuum zone, densely covering a single polygon (see wallnodes)
+        wallpoly: Polygon representing the boundary wall, vertices ordered and enforced to be clockwise.
+        outerpoly: Polygon representing the outermost polygon embedded in the wall.
+        materials: list of strings of length equal to wallpoly.vertices corresponding to the material of that wall segment
+        walltemps: list of floats of length equal to wallpoly.vertices corresponding to the wall temeprature of that wall segment in Kelvin
+        Rcoeffs: list of floats of length equal to wallpoly.vertices corresponding to the recycling coefficient of that wall segment
+        exits: list of booleans of length equal to wallpoly.vertices corresponding whether this wall segment is an exit
+        symmetry: string for the type of symmetry in problem
+        Rbounds: two-element array for minimum and maximum R in the universal cell
+        Zbounds: two-element array for minimum and maximum Z in the universal cell
+        vertex_list: "global" list of Vertices to be included in wallfile.
+        infile_name: string for the name of the general input file. Deafults to dg2d.in and likely to not change.
+        wallfile_name: string for the name of the "wallfile". Deafults to dg2d.in and likely to not change.
+    """
+
+    def __init__(self):
+        """
+        Constructor for DG2D object. Generates for minimal defaults.
+        """
+        self.polys = []
+        self.wallpoly = None
+        self.outerpoly = None
+        self.materials = None
+        self.walltemps = None
+        self.Rcoeffs = None
+        self.write_polygonfile = True
+        self.symmetry = "cylindrical"
+        self.Rbounds = [0.01,10.0]
+        self.Zbounds = [-10.0,10.0]
+        self.vertex_list = []
+        self.current_stratum = 0
+        self.infile_name = "dg2d.in"
+        self.wallfile_name = "wallfile.txt"
+        self.polygonfile_name = "polygon.nc"
+
+    def finalize(self):
+        subprocess.run("definegeometry2d "+self.infile_name,shell=True)
+
+    def set_symmetry(self,sym):
+        self.symmetry = sym
+   
+    def set_wallprops(self,walltemp=300.0,Rcoeff=1.0,material="mirror",exitzone=False,wallidx=None):
+        """
+        Sets boundary properties for domain. Can be applied uniformly or by segment depending on if wallidx is provided.
+
+        Args:
+            walltemp: (optional) wall temperature in Kelvin. Default = 300.
+            Rcoeff: (optional) float for recycling coefficient. Default = 1.0.
+            material: (optional) string for the wall material name. Default = "mirror"
+            exitzone: (optional) boolean default to False. If True, segment is a exit stratum rather than a plasma-facing component.
+            wallidx: (optional) integer index of the wall segment to apply properties to. If not provided, will apply the provided properties around entire wall.
+        """
+        # Apply to all segments as a default
+        if wallidx == None:
+            self.walltemps= np.array([walltemp]*len(self.wallpoly.vertices))
+            self.Rcoeffs= np.array([Rcoeff]*len(self.wallpoly.vertices))
+            self.materials= [material]*len(self.wallpoly.vertices)
+            self.exits= [exitzone]*len(self.wallpoly.vertices)
+        else:
+            self.walltemps[wallidx]= walltemp
+            self.Rcoeffs[wallidx]= Rcoeff
+            self.materials[wallidx]= material
+            self.exits[wallidx]= exitzone
+
+    def define_mesh(self,coords,conn,wallnodes=[-1],trust_wallnodes=True,wallpolys=[-1],progress=False):
+        """
+        Imports a set of coordinates and connectivity to generate a mesh for definegeometry2d.
+
+        Args:
+            coords: float array of size (Nnode, 2), where the first and second columns are the R and Z coordinates of the nodes, respectively.
+            conn: integer array of size (Npoly, Nseg), where each row are the node indices (in coords) that connect to form a polygon (usually a triangle). Must densely cover a domain.
+            wallnodes: (optional) integer array that specifies which indices of the nodes (in coords) form the boundary. Optional for triangular meshes; mandatory for higher-order polygons.
+        """
+        self.polys=[]
+        Nnode = len(coords[:,0])
+        Nseg = len(conn[0,:])
+        Npoly = len(conn[:,0])
+
+        for i in range(0,Nnode):
+            self.vertex_list.append(Vertex(i,coords[i,0],coords[i,1])) 
+        
+        iterator = range(0,Npoly)
+        if progress:
+            iterator = tqdm(iterator)
+        for i in iterator:
+            poly = Polygon()
+            for j in range(0,Nseg):
+                if conn[i,j] >= 0:
+                    poly.add_vertex(self.vertex_list[conn[i,j]])
+            self.polys.append(poly)
+
+        print("Done defining mesh. Now finding wall nodes...")
+
+        self.wallpoly = Polygon(increment=False)
+        startidx = get_first_idx(self.vertex_list) 
+        if (wallnodes[0] == -1 or not trust_wallnodes):
+            if (Nseg > 3):
+                print("ERROR: for quadrilateral or higher basic polygons in call to define_mesh, wallnodes must be specified")
+                
+            wallnodes_out=[]
+            wallnodes_out.append(self.vertex_list[startidx])
+            self.wallpoly.add_vertex(wallnodes_out[-1])
+            closed = False
+            prevnode=wallnodes_out[-1]
+            first = True
+            while not closed:
+                if progress:
+                    print(len(wallnodes_out))
+                if wallpolys == [-1]:
+                    next_node = find_next_wall_node(wallnodes_out[-1],prevnode,self.vertex_list,self.polys,first,check_clockwise=True)
+                else:
+                    next_node = find_next_wall_node(wallnodes_out[-1],prevnode,wallnodes,wallpolys,first,check_clockwise=True)
+                first = False
+                if next_node == wallnodes_out[0]:
+                    closed = True
+                else:
+                    prevnode = wallnodes_out[-1]
+                    wallnodes_out.append(next_node)
+                    self.wallpoly.add_vertex(wallnodes_out[-1])
+            self.wallpoly.is_clockwise(force=True)
+        else:
+            Nwall = len(wallnodes)
+            for i in range(0,Nwall):
+                self.wallpoly.add_vertex(self.vertex_list[wallnodes[np.mod(startidx+i,Nwall)]])
+
+    def define_limiter(self,Rlim_in,Zlim_in,maxdist=-1):
+        """
+        Defines the boundary of a domain to be triangulated by definegeometry2d.
+
+        Args:
+            Rlim: array of floats specifying R coordinates of boundary nodes.
+            Zlim: array of floats specifying Z coordinates of boundary nodes.
+        """
+
+        limpoly = Polygon()
+        if len(Rlim_in) != len(Zlim_in):
+            print("ERROR: Rlim and Zlim must have the same dimensions in call to define_limiter")
+        Nlim = len(Rlim_in)
+
+        mindist = 999999
+        minidx = -1
+        for i in range(0,len(Rlim_in)):
+            dist = np.linalg.norm([Rlim_in[i],Zlim_in[i]])
+            if dist < mindist:
+                minidx = i
+        
+        Rlim = Rlim_in[np.mod( np.array(range(minidx,minidx+Nlim),dtype=int),Nlim)]
+        Zlim = Zlim_in[np.mod( np.array(range(minidx,minidx+Nlim),dtype=int),Nlim)]
+        if maxdist > 0:
+            Rlim, Zlim = refine_limiter(Rlim,Zlim,maxdist)
+
+        for i in range(0,Nlim):
+            self.vertex_list.append(Vertex(i,Rlim[i],Zlim[i]))
+            limpoly.add_vertex(self.vertex_list[-1])
+        limpoly.is_clockwise(force=True)
+        limpoly.split = True
+        self.wallpoly= limpoly
+        self.polys.append(limpoly)
+
+    def write_files(self,aux_thickness=0.005):
+        """
+        Writes definegeometry2d input files from data in DG2D object.
+        All data must be specified except for auxilliary polygons.
+        """
+
+        def write_internal_polygon(poly,newzone=True):
+            f = open(self.infile_name,"a")
+    
+            if newzone:
+                f.write("new_zone ")
+            if poly.vacuum:
+                f.write("vacuum\n")
+            else:
+                f.write("plasma\n")
+    
+            f.write("new_polygon\n")
+            self.current_stratum += 1
+            f.write("  stratum "+str(self.current_stratum)+"\n")
+            if poly.is_clockwise():
+                for vertex in poly.vertices:
+                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+            else:
+                for vertex in reversed(poly.vertices):
+                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+    
+            if poly.split:
+                f.write("  triangulate_to_zones\n")
+            else:
+                f.write("  triangulate_polygon\n")
+            f.write("\n")
+            f.close()
+    
+        def write_aux_polygon(poly,material=None,walltemp=300.0,Rcoeff=1.0,exitzone=False):
+            f = open(self.infile_name,"a")
+    
+            if exitzone:
+                f.write("new_zone exit\n")
+            else:
+                f.write("new_zone solid\n")
+    
+            f.write("new_polygon\n")
+            self.current_stratum += 1
+            f.write("  stratum "+str(self.current_stratum)+"\n")
+            if not exitzone:
+                f.write("  material "+material+"\n")
+                f.write("  temperature "+str(walltemp)+"\n")
+                f.write("  recyc_coef "+str(Rcoeff)+"\n")
+            if poly.is_clockwise():
+                for vertex in poly.vertices:
+                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+            else:
+                for vertex in reversed(poly.vertices):
+                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+    
+            f.write("  triangulate_polygon\n")
+            f.write("\n")
+            f.close()
+
+
+        # Calculate bounds
+        Nvertex = len(self.vertex_list)
+        Rmin = 9e30
+        Rmax = -9e30
+        Zmin = 9e30
+        Zmax = -9e30
+
+        for i in range(0,Nvertex):
+            if self.vertex_list[i].coords[0] < Rmin:
+                Rmin = self.vertex_list[i].coords[0]
+            if self.vertex_list[i].coords[0] > Rmax:
+                Rmax = self.vertex_list[i].coords[0]
+            if self.vertex_list[i].coords[1] < Zmin:
+                Zmin = self.vertex_list[i].coords[1]
+            if self.vertex_list[i].coords[1] > Zmax:
+                Zmax = self.vertex_list[i].coords[1]
+    
+        dR = Rmax-Rmin
+        dZ = Zmax-Zmin
+        if self.symmetry == "cylindrical":
+            self.Rbounds = [max(0.005,0.5*Rmin),Rmax+0.5*dR]
+            self.Zbounds = [Zmin - 0.5*dZ, Zmax + 0.5*dZ]
+        else:
+            self.Rbounds = [Rmin-0.5*dR,Rmax+0.5*dR]
+            self.Zbounds = [Zmin - 0.5*dZ, Zmax + 0.5*dZ]
+
+
+        # Write header
+        f = open(self.infile_name,"w")
+        f.write("symmetry "+self.symmetry+"\n")
+        f.write("bounds %f %f  %f %f\n"%(self.Rbounds[0],self.Rbounds[1],self.Zbounds[0],self.Zbounds[1]))
+        f.write("wallfile "+self.wallfile_name+"\n")
+        f.write("end_prep\n")
+        f.write("\n")
+        f.close()
+
+        for poly in self.polys:
+            write_internal_polygon(poly)
+        
+        if True:
+            aux_polys, outpoly, newvertices = self.wallpoly.build_aux_wall_polygons(self.vertex_list[-1].id+1,aux_thickness)
+            self.outerpoly = outpoly
+
+            Nnew = len(newvertices)
+            for i in range(0,Nnew):
+                self.vertex_list.append(newvertices[i])
+
+            for i in range(0,len(aux_polys)):
+                write_aux_polygon(aux_polys[i],material=self.materials[i],walltemp=self.walltemps[i],Rcoeff=self.Rcoeffs[i],exitzone=self.exits[i])
+        else:
+            outpoly = self.wallpoly
+            self.outerpoly = self.wallpoly
+
+        f = open(self.infile_name,"a") 
+        Polygon.close_in_universal_cell(f,outpoly.vertices,0,self.current_stratum+1,self.materials[-1],self.Rcoeffs[-1],walltemp=self.walltemps[-1],clockwise=outpoly.is_clockwise())
+
+        if self.write_polygonfile:
+            f.write("polygon_nc_file "+self.polygonfile_name+"\n")
+        else:
+            f.write("polygon_nc_file none\n")
+        f.write("end\n")
+        f.close()
+
+        Nnode = len(self.vertex_list)
+        wallfile = open(self.wallfile_name,"w")
+        wallfile.write("# Wallfile automatically generated by script\n")
+        wallfile.write("1 \n")
+        wallfile.write("#\n")
+        wallfile.write("%d\n"%(Nnode))
+        wallfile.write("#\n")
+        for i in range(0,Nnode):
+            wallfile.write("%f   %f \n"%(self.vertex_list[i].coords[0],self.vertex_list[i].coords[1]))
+        wallfile.close()
+
+
+
+def setup(material,Rcoeff,Rlim=None,Zlim=None,gfile=None,bpfile=None,triang=None,walltemp=300.0,bindir="",run_dg2d=True,polygonfile_name="polygon.nc"):
+    """
+    Consolidated workflow routine to generate geometry for typical cases and run definegeometry2d. Generates in one of several ways depending on the keyword arguments provided.
+
+    Args:
+        material: string for the wall material (to be used uniformly around boundary)    
+        Rcoeff: float for the wall recycling coefficient (to be used uniformly around boundary)
+        walltemp: (optional) float for the wall temperature (to be used uniformly around boundary) in Kelvin. Default 300.
+        Rlim, Zlim: (optional) arrays of floats that define the limiter. Can be clockwise or counter-clockwise. If provided, definegeometry2d itself will perform triangulation and no other data is needed.
+        gfile: (optional) string for path and name to a EQDSK "g" file. Used here only to extract the limiter shape. Behvaior follows as if Rlim and Zlim were provided manually.
+        bpfile: (optional) string for path and name to an ADIOS2 file that contains a mesh which will be mimiced in the definegeometry2d input files with each triangle being a unique zone.
+        triang: (optional) a matlotlib.tri.Triangulation object whose triangulation will be imported and each triangle will be its own zone in the same order defined.
+        run_dg2d: (optional) boolean for whether definegeometry2d is to be run again. Default True. 
+        polygonfile_name: (optional) string for the polygon filename. Defaults to "polygon.nc". Set to "none" for particularly large (>10k node) meshes.
+    """
+
+    self = DG2D()
+
+    coords = [0]
+    if Rlim != None:
+        self.define_limiter(Rlim,Zlim)
+    elif gfile != None:
+        g = read_geqdsk(gfile)
+        Rlim = g.lim[:,0]
+        Zlim = g.lim[:,1]
+        self.define_limiter(Rlim,Zlim)
+    elif bpfile != None:
+        coords,conn,wallnodes = get_bp_mesh(bpfile) 
+        self.define_mesh(coords,conn,wallnodes=wallnodes)
+    elif triang != None:
+        r = triang.x
+        z = triang.y
+        nnode = len(r)
+        coords = np.zeros((nnode,2))
+        coords[:,0] = r
+        coords[:,1] = z
+        conn = triang.triangles
+        self.define_mesh(coords,conn)
+    else:
+        print("ERROR: calculate method requires some geometry data")
+
+    if (material == None) or (Rcoeff == None):
+        print("ERROR: calculate method requires material and recycling coefficient")
+
+    self.set_wallprops(walltemp=walltemp,material=material,Rcoeff=Rcoeff)
+    if polygonfile_name == "polygon.nc" and np.shape(coords)[0] > 10000:
+        print("WARNING: definegeometry2d is instructed to write polygon_nc_file even though mesh is very large. May take too long.\n")
+    self.polygonfile_name = polygonfile_name
+
+    self.write_files()
+    if bindir != "" and bindir[-1] != '/':
+        bindir = bindir+"/"
+
+    if run_dg2d:
+        subprocess.run(bindir+"definegeometry2d dg2d.in",shell=True)
+
+
+def get_first_idx(vertex_list):
+    # Start with vertex whose corresponding segment is closest to origin
+    startidx = -1
+    Nvertex = len(vertex_list)
+    mindist = 9.0e30
+    for i in range(0,Nvertex):
+        segdist = np.linalg.norm(0.5*np.array(vertex_list[i].coords + vertex_list[np.mod(i+1,Nvertex)].coords))
+        if segdist < mindist:
+            mindist = segdist 
+            startidx = i
+    return startidx
+
 
 def write_dg2d_header(f,symmetry,Xmin,Xmax,Zmin,Zmax,wallfile_name="wallfile.txt"):
     f.write("symmetry "+symmetry+"\n")
@@ -16,6 +399,7 @@ def write_dg2d_header(f,symmetry,Xmin,Xmax,Zmin,Zmax,wallfile_name="wallfile.txt
     f.write("end_prep\n")
     f.write("\n")
 
+# Not sure this works. Use poly_to_try executable instead.
 def get_triangulation(tris,nodes):
     Nnode = len(nodes)
     r = np.zeros(Nnode)
@@ -809,7 +1193,7 @@ def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.
     else:
         return polys,wall
 
-def refine_limiter(r,z,maxdist):
+def refine_limiter(r_in,z_in,maxdist):
     """
     Method that refines a polygon to have more points. Useful for increasing resolution at the wall. Currently the only way to refine a triangulation.
 
@@ -818,6 +1202,13 @@ def refine_limiter(r,z,maxdist):
         z: List of floats for the Z coordinate of the polygon to refine.
         maxdist: Float; maximum allowed distance between vertices. Method halves distance until this condition is specified.
     """
+
+    r = np.copy(r_in)
+    z = np.copy(z_in)
+    if not (np.abs(r[0]-r[-1]) < 1.0e-4 and np.abs(z[0] - z[-1]) < 1.0e-4):
+        r = np.append(r,r[0])
+        z = np.append(z,z[0])
+
     N = len(r)
     rnew = []
     znew = []
@@ -1088,4 +1479,41 @@ def write_wallfile(nodes,wallfile_name="wallfile.txt"):
         wallfile.write("%f   %f \n"%(nodes[i].coords[0],nodes[i].coords[1]))
     wallfile.close()
  
+def get_triangulation(Nzone,polygonfile="polygon.nc"):
+    p = nc.Dataset(polygonfile,"r")
+    poly_zone = p["g2_polygon_zone"][:]
+    poly_rz = p["g2_polygon_xz"][:,0:3,:]
+    p.close()
 
+    conn = -np.ones([Nzone,3],dtype=int)
+    r = []
+    z = []
+    k=0
+    eps = 1.0e-5
+
+    for i in range(0,Nzone):
+        izone = poly_zone[i]-1
+        for j in range(0,3):
+            idx_r = np.argwhere( np.abs(r[:]-poly_rz[i,j,0])<eps)
+            if idx_r.size == 0:
+                idx_z = np.array([])
+            else:
+                idx_z = np.argwhere( np.abs(z[idx_r]-poly_rz[i,j,1])<eps)
+
+            if idx_z.size == 0:
+                np.append(r, poly_rz[i,j,0])
+                np.append(z, poly_rz[i,j,1])
+                conn[izone,j] = len(r)-1
+            elif idx_z.size != 1:
+                print("ERROR: found more than one point already stored")
+            else:
+                conn[izone,j] = idx_r[idx_z[0]] 
+        
+    if np.any(conn == -1):
+        print("ERROR: did not fill in conn array in get_triangulation")
+
+    rz = np.zeros([len(r),2])
+    rz[:,0] = r
+    rz[:,1] = z
+        
+    return rz, conn

@@ -11,22 +11,15 @@ import scipy.special as sp
 import netCDF4 as nc
 import sys
 
-def get_bp_mesh(filename="xgc.mesh.bp",oldfile=False,newapi=False):
-    if not newapi:
-        meshfile = adios2.open(filename,"r")
-        if oldfile:
-            coords = meshfile.read("/coordinates/values")
-            connections = meshfile.read("/cell_set[0]/node_connect_list")
-        else:
-            coords = meshfile.read("rz")
-            connections = meshfile.read("nd_connect_list")
-            wallnodes = meshfile.read("grid_wall_nodes")
+def get_bp_mesh(filename="xgc.mesh.bp",oldfile=False):
+    meshfile = adios2.Stream(filename,"rra")
+    if oldfile:
+        coords = meshfile.read("/coordinates/values")
+        connections = meshfile.read("/cell_set[0]/node_connect_list")
     else:
-        meshfile = adios2.Stream(filename,"r")
-        for _ in meshfile.steps():
-            coords = meshfile.read("rz")
-            connections = meshfile.read("nd_connect_list")
-            wallnodes = meshfile.read("grid_wall_nodes")
+        coords = meshfile.read("rz")
+        connections = meshfile.read("nd_connect_list")
+    wallnodes = meshfile.read("grid_wall_nodes")
     # wall_nodes refers to list of nodes by starting count from 1,
     # which is confusingly inconsistent with node_connect_list.
     # Make them consistent here.
@@ -67,6 +60,7 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
     if trifile_base==None:
         # Get XGC mesh,
         coords,connections,wallnode_ids = get_bp_mesh()
+        triang = mtri.Triangulation(coords[:,0],coords[:,1],connections)
     else:
         # Get Triangle files,
         nodefile=trifile_base+".node"
@@ -254,7 +248,7 @@ def write_background_files(dt,tstep,tstep_neut,wallnodes_ordered,wall_triangles,
         Ti_perp=np.average(f.read("i_T_perp",axis=1))
         ui_para=np.average(f.read("i_u_para"),axis=1)
     else:
-        f=adios2.open("xgc.f2d.%05d.bp"%tstep,"r")
+        f=adios2.Stream("xgc.f2d.%05d.bp"%tstep,"rra")
         ne=f.read("e_den")
         Te_para=f.read("e_T_para")
         Te_perp=f.read("e_T_perp")
@@ -262,11 +256,11 @@ def write_background_files(dt,tstep,tstep_neut,wallnodes_ordered,wall_triangles,
         Ti_perp=f.read("i_T_perp")
         ui_para=f.read("i_u_para")
     f.close()
-    f=adios2.open("xgc.bfield.bp","r")
+    f=adios2.Stream("xgc.bfield.bp","rra")
     Bfield = f.read("bfield")
     f.close()
 
-    f=adios2.open("xgc.neutrals.%05d.bp"%tstep_neut,"r")
+    f=adios2.Stream("xgc.neutrals.%05d.bp"%tstep_neut,"rra")
     raw_source = f.read("wall_source")
 
     Te = (2.0*Te_perp + Te_para)/3.0
@@ -402,7 +396,7 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
         Bfield = f.read("/node_data[0]/values")
         f.close()
     else:
-        f=adios2.open("xgc.f3d.%05d.bp"%tstep,"r")
+        f=adios2.Stream("xgc.f2d.%05d.bp"%tstep,"rra")
         ne=f.read("e_den")
         Te_para=f.read("e_T_para")
         Te_perp=f.read("e_T_perp")
@@ -410,7 +404,7 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
         Ti_perp=f.read("i_T_perp")
         ui_para=f.read("i_u_para")
         f.close()
-        f=adios2.open("xgc.bfield.bp","r")
+        f=adios2.Stream("xgc.bfield.bp","rra")
         Bfield = f.read("bfield")
         f.close()
 
@@ -419,12 +413,12 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
 #    f.close()
 
     # Altnernative raw source:
-    f=adios2.open("xgc.oneddiag.bp","r")
+    f=adios2.Stream("xgc.oneddiag.bp","rra")
     nstep =int(f.available_variables()["step"]['AvailableStepsCount'])
-    tstep_map = f.read("step",start=[],count=[],step_start=0,step_count=nstep)
+    tstep_map = f.read("step",start=[],count=[],step_selection=[0,nstep])
     f.close()
 
-    f=adios2.open("xgc.sheathdiag.bp","r")
+    f=adios2.Stream("xgc.sheathdiag.bp","r")
     i = 0
     found = False
     for step in f:
@@ -456,9 +450,9 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
     ui_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),ui_para)
     # XGC's coordinate system is (R,Z,phi_xgc)
     # DEGAS2 is (x,y,z) = (R,-phi,Z) = 
-    Bx_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),Bfield[:,0])
-    Bz_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),Bfield[:,1])
-    By_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),-Bfield[:,2])
+    Bx_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),Bfield[0,:])
+    Bz_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),Bfield[1,:])
+    By_interp = LinearNDInterpolator(list(zip(r_xgc,z_xgc)),-Bfield[2,:])
 
     # Get coordinates of zone centers from generated geometry.nc file
     geomfilename="geometry.nc"
@@ -690,7 +684,11 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
     return source_strength
 #    return source_flux
 
-def write_dummy_bg_files(nzone,nwallsegs):
+def write_dummy_bg_files(nzone,nwall_input ,nebins=-1):
+    if (nebins > 0):
+        nwallsegs = nwall_input*nebins
+    else:
+        nwallsegs = nwall_input
     nperline = 10
     stratum=nzone+2
     
@@ -709,7 +707,10 @@ def write_dummy_bg_files(nzone,nwallsegs):
     f.write("\n")
     f.write("#\nsegment\n#\n")
     for i in range(0,nwallsegs):
-        f.write("%d "%(i))
+        if nebins > 0:
+            f.write("%d "%(int(i/nwall_input)))
+        else:
+            f.write("%d "%(i))
         if ((i+1)%nperline == 0) and i != nwallsegs-1:
             f.write("\n")
     f.write("\n")
@@ -718,6 +719,38 @@ def write_dummy_bg_files(nzone,nwallsegs):
         f.write("%e "%(1e20))
         if ((i+1)%nperline == 0) and i != nwallsegs-1:
             f.write("\n")
+
+def write_dummy_bg_files_aux(nzone,nwall_input,stratum_start):
+    nwallsegs = nwall_input
+    nperline = 10
+    stratum=nzone+2
+    
+    f=open("plasmafile.txt","w")
+    f.write("%10s %10s %10s %10s %10s\n"%("zone","T(1)","N(1)","T(2)","N(2)"))
+    for i in range(0,nzone):
+        f.write("%i %e %e %e %e\n"%(i+1,100.0,1e19,100.0,1e19))
+    f.close()
+    
+    f=open("sourcefile.txt","w")
+    f.write("#\nstratum\n#\n")
+    for i in range(0,nwallsegs):
+        f.write("%d "%(stratum_start+i))
+        if ((i+1)%nperline == 0) and i != nwallsegs-1:
+            f.write("\n")
+    f.write("\n")
+    f.write("#\nsegment\n#\n")
+    for i in range(0,nwallsegs):
+        f.write("%d "%(0))
+        if ((i+1)%nperline == 0) and i != nwallsegs-1:
+            f.write("\n")
+    f.write("\n")
+    f.write("#\nF\n#\n")
+    for i in range(0,nwallsegs):
+        f.write("%e "%(1e20))
+        if ((i+1)%nperline == 0) and i != nwallsegs-1:
+            f.write("\n")
+
+
 
 
 

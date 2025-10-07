@@ -64,7 +64,7 @@ class Source:
             # The source is to be specified with a combination of 'strength', 'stratum', and 'segment'
             # However, if the given strength/segment/stratum lists are too long, this method will write a sourcefile.
             self.set_source_from_segments(strength, stratum, segment)
-            self.check_segments()
+            self.check_segments(sourcefile=sourcefile)
         else:
             self.sourcefile = sourcefile
             
@@ -134,20 +134,20 @@ class Source:
 
         return
 
-    def check_segments(self, max_line_len=275):
+    def check_segments(self, max_line_len=275, sourcefile="sourcefile.txt"):
         """ Method to check the segment/strength/stratum data and reformat if needed into a sourcefile.
         Lines in the 'db.in' file (below) can only be LINELEN(=300 for this build), if they're too long the
         Source must be specified via a sourcefile.txt instead of directly in db.in.
         """
         line_lens = [len(self.segment), len(self.strength), len(self.stratum)]
         if any([l >= max_line_len for l in line_lens]):
-            print("WARNING: Some lines in 'db.in' may exceed the maximum line length! - writing equivalent 'sourcefile.txt'")
+            print(f"WARNING: Some lines in 'db.in' may exceed the maximum line length! - writing equivalent '{sourcefile}'")
             # Convert the segment, strength, and stratum back into lists...
             strength = [float(s) for s in self.strength.split(" ")]
             stratum = [int(s) for s in self.stratum.split(" ")]
             segment = [int(s) for s in self.segment.split(" ")]
-            write_sourcefile_from_segments(strength=strength, stratum=stratum, segment=segment, filename="sourcefile.txt")
-            self.sourcefile = "sourcefile.txt" # This will use the sourcefile instead of the strength/stratum/segment attrs. 
+            write_sourcefile_from_segments(strength=strength, stratum=stratum, segment=segment, filename=sourcefile)
+            self.sourcefile = sourcefile # This will use the sourcefile instead of the strength/stratum/segment attrs. 
             self.sourcefile_fmt = "tabular" 
             
         return
@@ -167,7 +167,6 @@ def write_sourcefile_from_segments(strength=[1e24], stratum=[3], segment=[1], fi
         f.write(f"{int(strat)} {int(seg)} {S}\n")
     f.close()
     
-
 def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
     """ Function to write the 'db.in' input file for the defineback program.
     String formatting is important here because these values will be read by FORTRAN

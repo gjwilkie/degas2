@@ -1,13 +1,13 @@
-# Created on Nov. 21, 2024 by qpratt
-# Example degas2 setup based on the micerscript.py from A. Angulo and G. Wilkie
+# Created on Nov. 21, 2024 by Quinn Pratt
+# DEGAS2 setup based on the micerscript.py from A. Angulo and G. Wilkie
 # 
-# SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN dir. 
+# SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN directory. 
 #        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
 #
 # The user should run the following commands (on the omega cluster at GA) before executing this scipt,
 # >> module purge
 # >> module load degas2
-# This will set up the necessary env. vars and modify the path.
+# This will set up the necessary env. vars and modify the path/pythonpath.
 # ----------------
 # Core python,
 import os
@@ -24,11 +24,11 @@ import postprocess
 import numpy as np
 import scipy.interpolate as interpolate
 import netCDF4 as nc
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 # ----------------
 # General,
-# - input filenames (for this script),
+# - input files (for this script),
 profile_fname = "input_profiles.nc"
 geqdsk_fname = "geqdsk"
 setup_kwargs_fname = "omfit_setup_dict.json" # optional
@@ -115,9 +115,9 @@ if run_problemsetup:
         print(f"INFO (omfit_setup): Using standard problem label='{std_problem_label}'")
         p = problem.genStdProblem(std_problem_label)
     # >>>>
-    # outputs = ['problem.in','problem.nc']
     print("Running problemsetup...\n")
     subprocess.run(d2path+"/problemsetup",shell=True)
+    # outputs = ['problem.in','problem.nc']
     # <<<<
 else:
     # We can skip this if a 'problem.nc' file is provided,
@@ -151,7 +151,9 @@ minarea = dg2d_kwargs.get("minarea",-1)
 RZlim_start = dg2d_kwargs.get("RZlim_start", None)
 
 # From the degas2/scripts/dg2d.py
-geo_kw = dict(recyc_coef=recyc, Twall=walltemp,dlim_max=dlim_max,
+geo_kw = dict(recyc_coef=recyc, 
+              Twall=walltemp,
+              dlim_max=dlim_max,
               clockwise=True, # Not sure why this is True, default is False.
               RZlim_start=RZlim_start, # Upper HFS point on limiter.
               minarea=minarea,
@@ -189,13 +191,13 @@ if custom_tri:
 else:
     # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
     # the psifunc is used later when we run defineback.
-    # outputs = ['wallfile.txt','dg2d.in']
     psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
+    # outputs = ['wallfile.txt','dg2d.in']
 if run_definegeometry2d:
     # >>>>
-    # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]
     print("Running definegeometry2d...\n")
     subprocess.run(d2path+"/definegeometry2d dg2d.in",shell=True)
+    # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]
     # <<<<
 else:
     # We can skip this if a 'geometry.nc' file is provided.
@@ -216,58 +218,54 @@ if run_defineback:
         print(f"INFO (omfit_setup): Using custom 'plasmafile.txt.")
         check_for_file("plasmafile.txt", fail=True)
     else:
-        # outputs = ['plasmafile.txt']
         back_kw = dict(psi_data=psi_data, rot_data=omega_data, ni_data=ni_data)
         defineback.generate_plasma_file_through_psi(ne_data, Te_data, Ti_data, psifunc,**back_kw)
+        # outputs = ['plasmafile.txt']
 
-    # From the degas2/scripts/source.py script,
-    # Source Option #1: Puff,
-    #     This will produce a "puff" type source at a temperature of 300K uniformly around limiter at a strength of
-    #     1.0e24 nuclei per m^2 per s. Using Nsample flights and treating as a 
-    #sgroup = source.Source(Nsample,"puff","D",rootspecies="D",pufftemp=300.0,strength=1.0e24,stratum=3,segment="112", specify_flux=True)
-
-    # Source Option #2: Plate,
-    #     This treats the source as if it's recycling, same flux as above, energy distribution of produced neturals
-    #     are determined by ions near the wall and the recycling properies of the PFC.
-    
-    # Unpack args for the source.Source class,
-    n_flights = db_kwargs.get("n_flights", 1000)
-    source_type = db_kwargs.get("source_type",'plate')
-    source_species = db_kwargs.get("source_species", "D")
-    source_root_species = db_kwargs.get("source_species", source_species+"+")
-    if source_type in ['vol_source','puff']:
-        source_root_species = source_species
-
-    if source_type == "vol_source":
-        # Force certain settings,
-        db_kwargs['custom_sourcefile'] = True # must use sourcefile, forces the check for sourcefile.txt later.
+    n_sourcegroups = db_kwargs.get("n_sourcegroups", 1)
+    sourcegroups = []
+    for i in range(n_sourcegroups):
+        sg_kwargs = db_kwargs.get(f"sourcegroup_{i}", {})
         
-    # Unpack kwargs for the source.Source class,
-    source_kw = dict(rootspecies=source_root_species,
-                     specify_flux=db_kwargs.get("specify_flux", True),
-                     pufftemp=db_kwargs.get("puff_temp",None),
-                     puffexp=db_kwargs.get("puff_exp", None),
-                     strength=db_kwargs.get("source_strength", 1.e23), # [/m2/s] when specify_flux in 'db.in'
-                     stratum=db_kwargs.get("stratum", 3),
-                     segment=db_kwargs.get("segment", "*"), 
-                     )
-    
-    # Option to pass a sourcefile.txt directly...
-    custom_sourcefile = db_kwargs.get("custom_sourcefile",False)
-    if custom_sourcefile:
-        print(f"INFO (omfit_setup): Using custom 'sourcefile.txt.")
-        check_for_file("sourcefile.txt", fail=True)
-        source_kw["strength"] = None # disables the source-by-segment methods in the Source class.
+        # Unpack args for the source.Source class,
+        n_flights = sg_kwargs.get("n_flights", 1000)
+        source_type = sg_kwargs.get("source_type",'plate')
+        source_species = sg_kwargs.get("source_species", "D")
+        source_root_species = sg_kwargs.get("source_species", source_species+"+")
+        if source_type in ['vol_source','puff']:
+            source_root_species = source_species
+
+        if source_type == "vol_source":
+            # Force certain settings,
+            sg_kwargs['custom_sourcefile'] = True # must use sourcefile, forces the check for sourcefile.txt later.
+            
+        # Unpack kwargs for the source.Source class,
+        source_kw = dict(rootspecies=source_root_species,
+                         specify_flux=sg_kwargs.get("specify_flux", True),
+                         pufftemp=sg_kwargs.get("puff_temp",None),
+                         puffexp=sg_kwargs.get("puff_exp", None),
+                         strength=sg_kwargs.get("source_strength", 1.e23), # [/m2/s] when specify_flux in 'db.in'
+                         stratum=sg_kwargs.get("stratum", 3),
+                         segment=sg_kwargs.get("segment", "*"),
+                         sourcefile=f"sourcefile_{i}.txt", 
+                         )
         
-    # outputs = ['sourcefile.txt'] CURRENTLY ONLY ONE GROUP IS SUPPORTED,
-    #   may only exist for large numbers of source segments.
-    sgroup = source.Source(n_flights,source_type,source_species,**source_kw)
+        # Option to pass a sourcefile.txt directly...
+        custom_sourcefile = sg_kwargs.get("custom_sourcefile",False)
+        if custom_sourcefile:
+            print(f"INFO (omfit_setup): Source Group {i} requires custom 'sourcefile_{i}.txt.")
+            check_for_file(f"sourcefile_{i}.txt", fail=True)
+            source_kw["strength"] = None # disables the source-by-segment methods in the Source class.
+            
+        # outputs = ['sourcefile_{i}.txt']
+        #   may only exist for large numbers of source segments.
+        sourcegroups += [ source.Source(n_flights,source_type,source_species,**source_kw) ]
+    source.write_db_input(sourcegroups)
     # outputs = ['db.in']
-    source.write_db_input([sgroup])
     # >>>>
-    # outputs = ['background.nc','density*.txt','temperature*.txt']
     print("Running defineback...\n")
     subprocess.run(d2path+"/defineback db.in",shell=True)
+    # outputs = ['background.nc','density*.txt','temperature*.txt']
     # <<<<
 else:
     # We can skip this if a 'background.nc' file is provided.
@@ -280,9 +278,9 @@ run_tallysetup = setup_kwargs.get("run_tallysetup", True)
 if run_tallysetup:
     # Use supplied tally.in file
     # >>>>
-    # outputs = ['tally.nc']
     print("Running tallysetup...\n")
     subprocess.run(d2path+"/tallysetup",shell=True)
+    # outputs = ['tally.nc']
     # <<<<
 else:
     # We can skip this if a 'tally.nc' file is provided.

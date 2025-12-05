@@ -65,26 +65,41 @@ d2path = os.environ["DEGAS2_BIN"] # set with >> module load degas2
 print(f"INFO (omfit_setup): DEGAS2_BIN={d2path}")
 
 # ----------------
+# Magnetic equilibrium,
+geqdsk_file = geqdsk_fname
+from geomutils import read_geqdsk
+g = read_geqdsk(geqdsk_file)
+rgrid = g.rgrid
+zgrid = g.zgrid
+# Defines psi_n(R,Z) = (psi - min(psi))/(max(psi) - min(psi)), Normalized poloidal flux.
+psin_rz = (g.psirz-g.ssimag)/(g.ssibry-g.ssimag)
+psifunc = lambda R,Z : interpolate.RectBivariateSpline(rgrid, zgrid, psin_rz.T)(R, Z)[0]
+
+# ----------------
 # Profile setup,
 # We use the normalized poloidal magnetic flux, psi_n, as the radial coordinate.
 # Kinetic profiles are read from a .nc dataset,
 profiles = nc.Dataset(profile_fname)
 profiles.set_auto_mask(False) # makes variables come in as np.array rather than MaskedArrays
 
-# [WIP] - Append 0 far away (psi_n = 2.0) so the plasma is defined over the whole grid.
-#   It is probably better to load the gEQDSK here and put zero at the maximum psi_n in the vessel?
-psi_data = list(profiles["psi_n"][:]) + [2.0]
-ne_data = list(profiles["n_e"][:]) + [0.] # [/m3]
-ni_data = list(profiles["n_i"][:]) + [0.] # [/m3]
-Te_data = list(profiles["T_e"][:]) + [0.] # [eV]
-Ti_data = list(profiles["T_i"][:])  + [0.]# [eV]
+# clip temperatures, 
+min_temp = 300./11650 # 300 K --> eV
+T_i = np.clip(profiles["T_i"][:],a_max=None, a_min=min_temp)
+T_e = np.clip(profiles["T_e"][:],a_max=None, a_min=min_temp)
+# clip densities,
+min_dens = 0.0
+n_e = np.clip(profiles["n_e"][:],a_max=None, a_min=min_dens)
+n_i = np.clip(profiles["n_i"][:],a_max=None, a_min=min_dens)
+
+# Append 0 at the grid boundary so the plasma is defined over the whole grid.
+psi_data = list(profiles["psi_n"][:]) + [np.amax(psin_rz)]
+ne_data = list(n_e) + [0.] # [/m3]
+ni_data = list(n_i) + [0.] # [/m3]
+Te_data = list(T_e) + [0.] # [eV]
+Ti_data = list(T_i) + [0.]# [eV]
 # Toroidal angular rotation data, V_tor = R*omega
 omega_data = list(profiles["omega"][:]) + [0.] # [rad/s]
 profiles.close()
-
-# ----------------
-# Magnetic equilibrium,
-geqdsk_file = geqdsk_fname
 
 # ----------------
 # DEGAS2 problemsetup,
@@ -176,17 +191,7 @@ if custom_tri:
         trifile_base=tri_basename,
         make_plot=False,
     )
-    # For things to work properly we need to provide a psi_func interpolant.
-    # In the future we should modify the xgcpost.write_geometry_files() function
-    # to read psi_n as an attr of the Triangle .node file. 
-    # Then we can make a better interpolant.
-    from geomutils import read_geqdsk
-    g = read_geqdsk(geqdsk_file)
-    rgrid = g.rgrid
-    zgrid = g.zgrid
-    # Defines psi_n(R,Z) = (psi - min(psi))/(max(psi) - min(psi)), Normalized poloidal flux.
-    psi_rz = (g.psirz-g.ssimag)/(g.ssibry-g.ssimag)
-    psifunc = lambda R,Z : interpolate.RectBivariateSpline(rgrid, zgrid, psi_rz.T)(R, Z)[0]
+    # NOTE: psifunc is still defined from above.
 
 else:
     # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
@@ -231,7 +236,7 @@ if run_defineback:
         n_flights = sg_kwargs.get("n_flights", 1000)
         source_type = sg_kwargs.get("source_type",'plate')
         source_species = sg_kwargs.get("source_species", "D")
-        source_root_species = sg_kwargs.get("source_species", source_species+"+")
+        source_root_species = sg_kwargs.get("source_rootspecies", source_species+"+")
         if source_type in ['vol_source','puff']:
             source_root_species = source_species
 

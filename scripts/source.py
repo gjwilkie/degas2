@@ -39,8 +39,13 @@ class Source:
         #
         self.sourcefile_fmt=sourcefile_fmt
         #
-        if not rootspecies:
-            self.rootspecies = self.species
+        if rootspecies is None:
+            # automatically configure based on stype...
+            if stype == "plate":
+                rootspecies = species + "+"
+            else:
+                rootspecies = species
+            self.rootspecies = rootspecies
         else:
             self.rootspecies = rootspecies
         #
@@ -102,9 +107,15 @@ class Source:
                 segment = list(range(s1,s2))
                 N = len(segment)
                 if len(strength) != N:
-                    # distribute strength over the number of segments.
-                    strength = [float(strength[0])/N]*N
+                    if self.specify_units == "specify_flux":
+                        # Repeat the given flux value over the segments. 
+                        strength = [float(strength[0])]*N
+                    elif self.specify_units == "specify_current":
+                        # Assume the user wants the TOTAL current to be the given value...
+                        # Thus, we have to divide the given 'strength' over the number of segments.
+                        strength = [float(strength[0])/N]*N
                 if len(stratum) != N:
+                    # distribute the stratum for each segment (assumes they are on the same stratum)
                     stratum = [stratum[0]]*N
                 # add as attrs,
                 self.segment = " ".join([f"{int(s)}" for s in segment])
@@ -199,10 +210,11 @@ def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
             f.write(f"  source_stratum {source.stratum}\n")
             f.write(f"  source_segment {source.segment}\n")
             f.write(f"  source_strength {source.strength}\n")
-        if source.pufftemp:
-            f.write(f"  source_puff_temp {source.pufftemp}\n")
-        if source.puffexp:
-            f.write(f"  source_puff_exponent {source.puffexp}\n")
+        if source.type == "puff":
+            if source.pufftemp:
+                f.write(f"  source_puff_temp {source.pufftemp}\n")
+            if source.puffexp:
+                f.write(f"  source_puff_exponent {source.puffexp}\n")
         f.write(f"  source_nflights {int(source.nflights)}\n")
         f.write("end_source_group\n")
     f.close()

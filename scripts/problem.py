@@ -174,6 +174,10 @@ def genStdProblem(label):
         p=generateProblemInput(["0","H","H2","H2+"],["e","H+"],["hionize5","hh_chargex","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"],["C"],["hdesorbc","h2desorbc","hreflc"])
     if label == "C-D":
         p=generateProblemInput(["0","D","D2","D2+"],["e","D+"],["hionize5","dd_chargex","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"],["C"],["hdesorbc","h2desorbc","dreflc"])
+    if label == "C-D2":
+        p=generateProblemInput(["0","D","D2","D2+"],["e","D+"],["hionize5","hrecombine5","dd_chargex","h2dis_jcr","h2ion_jcr","h2dision_jcr","h2pdision_jcr","h2pdis_jcr","h2pdisrec_jcr"],["C"],["hdesorbc","h2desorbc","dreflc"])
+    if label == "mirror-D":
+        p=generateProblemInput(["0","D","D2","D2+"],["e","D+"],["hionize5","dd_chargex","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"],["mirror"],["hmirror","h2mirror"])
     if label == "Li":
         p=generateProblemInput(["0","H"],["e","H+"],["hionize5","hh_chargex"],["Li"],["H_refl_svftrim_Li","hdesorbLi"])
     if label == "Li_reflOnly":

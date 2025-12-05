@@ -125,7 +125,7 @@ there as well.
 @m tl_cv_max_params 11  
 
 @m scoring_data_max 280            // Length of |scoring_data| array
-@m max_bins 200
+@m max_bins 512
 
 @ Variable definitions. |tally_ind| is dimensioned from zero to
 accomodate netcdf.  The 0 index is unused. ??? Start from 1 for now.

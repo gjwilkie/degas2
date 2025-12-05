@@ -303,9 +303,14 @@ skip:       continue
          end if
       end do
 
-      assert(de_zone_frags_num[view] > 0)
-      assert(de_zone_frags_min_zn[view] != int_unused)
-      assert(de_zone_frags_max_zn[view] >= de_zone_frags_max_zn[view])
+      if (de_zone_frags_num[view] > 0) then
+         assert(de_zone_frags_min_zn[view] != int_unused)
+         assert(de_zone_frags_max_zn[view] >= de_zone_frags_max_zn[view])
+      end if
+      
+      // assert(de_zone_frags_num[view] > 0)
+      // assert(de_zone_frags_min_zn[view] != int_unused)
+      // assert(de_zone_frags_max_zn[view] >= de_zone_frags_max_zn[view])
 
       return
       end

@@ -3,7 +3,9 @@ import species
 #import material as mat
 #import reaction as rc
 import utils
-
+import os
+import netCDF4 as nc
+import numpy as np
 
 class Problem:
     """
@@ -190,3 +192,133 @@ def genStdProblem(label):
         p=generateProblemInput(["0","H","H2","H2+"],["e","H+"],["hionize5","hh_chargex","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"],["Fe","mirror"],["h_des_maxw_fe","h2_des_maxw_fe","hreflfe","hmirror","h2mirror"])
     return p
 
+def get_reactions_from_problem(degas2_in, problem_nc, verbose=True):
+    """ Function used to return information about reactions in a given degas2 simulation.
+    This is designed to read,
+      (1) the degas2.in file to figure out where the reactions.nc file is...
+      (2) the problem.nc file to figure out what reactions were requested by the user. 
+
+    Args:
+        degas2_in (str) path to the degas2.in file.
+        problem_nc (str) path to the problem_nc file.
+
+    Returns:
+        dictionary with a subset of the info from reactions.input pertaining to this problem.nc.
+    """
+    for f in [degas2_in, problem_nc]:
+        if not os.path.exists(f):
+            raise FileNotFoundError(f"The file {f} does not exist.")
+    # Read degas2_in to determine the reactions.input file path,
+    with open(degas2_in, 'r') as file:
+        dg2in_lines = file.readlines()
+        #reactions_in = [l.strip() for l in dg2in_lines if l.strip().startswith("reaction_infile")][0].split(" ")[1]
+        reactions_nc = [l.strip() for l in dg2in_lines if l.strip().startswith("reactionfile")][0].split(" ")[1]
+    
+    # use helper function to prase the reactions.input file,
+    #reactions_dict = read_reactions_input(reactions_in)
+    reactions_dict = read_reactions_nc(reactions_nc)
+
+    # Read the problem.nc file and figure out the indices of reactions used in this problem.
+    # This *appears* to be held in the 'problem_rc' data field.
+    with nc.Dataset(problem_nc, 'r') as ds:
+        problem_rc = ds.variables['problem_rc'][:] # np.MaskedArray
+        rxn_in_problem = [ list(reactions_dict.keys())[i-1] for i in problem_rc ]
+    out = {k: reactions_dict[k] for k in rxn_in_problem}
+    return out
+
+def read_reactions_nc(reactions_nc):
+    """ Function to prase the reactions.nc data file.
+    This function is similar to problem.read_reactions_input() but it reads directly from 
+    the NetCDF file rather than the .input text file.
+    
+    Args:
+        reactions_nc (str) path to the reactions.nc file.
+
+    Returns:
+        dictionary with info about reactions included in DEGAS2.   
+    """
+    if not os.path.exists(reactions_nc):
+        raise FileNotFoundError(f"The file {reactions_nc} does not exist.")
+
+    # Open the NetCDF file in read mode
+    with nc.Dataset(reactions_nc, 'r') as ds:
+        # helper to safely decode byte arrays to strings
+        def decode_strings(var_name):
+            data = ds.variables[var_name][:]
+            if data.ndim > 1:
+                data = nc.chartostring(data)
+            # NetCDF4 usually returns numpy object arrays for strings, 
+            # but we ensure they are standard strings for the dict keys/values
+            out = [str(s).rstrip() if not isinstance(s, bytes) else s.decode('utf-8') for s in data]
+            return out
+
+        # Extracting the variables
+        data_path = decode_strings('reaction_filename')
+        long_name = decode_strings('reaction_name')
+        classification = decode_strings('reaction_type')
+        name = decode_strings('reaction_sy')
+
+    # Constructing the dictionary-of-dictionaries
+    result = {}
+    for i in range(len(name)):
+        k = name[i]
+        result[k] = {
+            'data_path': data_path[i],
+            'long_name': long_name[i],
+            'classification': classification[i]
+        }
+        
+    return result
+    
+def read_reactions_input(reactions_input):
+    """ Function used to read the reactions.input file and convert it to a dict-of-dicts
+    Ignores lines starting with '#' or '$'.
+    """
+    result = {}
+    
+    if not os.path.exists(reactions_input):
+        raise FileNotFoundError(f"The file {reactions_input} does not exist.")
+
+    with open(reactions_input, 'r') as f:
+        # 1. Filter out comments and empty lines immediately
+        lines = [
+            line.strip() for line in f 
+            if line.strip() and not line.startswith(('#', '$'))
+        ]
+
+    # 2. Process the cleaned lines in steps of 4
+    # Format: 0:long_name, 1:name+symbol, 2:data_path, 3:classification
+    for i in range(0, len(lines), 4):
+        try:
+            full_name = lines[i]
+            
+            # Split 'hionize e + H * -> e + H+ + e' into ['hionize', 'rest...']
+            # maxsplit=1 ensures we only split at the first whitespace/tab
+            name_parts = lines[i+1].split(None, 1)
+            name = name_parts[0]
+            symbolic_rep = name_parts[1] if len(name_parts) > 1 else ""
+            
+            data_path = lines[i+2]
+            classification = lines[i+3]
+
+            # 3. Build the nested dictionary
+            result[name] = {
+                "long_name": full_name,
+                "symbolic_representation": symbolic_rep,
+                "data_path": data_path,
+                "classification": classification
+            }
+        except IndexError:
+            print(f"WARN: Found a partial text block at the end of the file starting with '{lines[i]}'. Skipping.")
+            break
+
+    return result
+
+if __name__ == "__main__":
+    # Run a test of some functions in this file,
+    d2path = os.environ["DEGAS2_DIR"] # set with >> module load degas2
+    print(f"TEST (problem.py): DEGAS2_DIR={d2path}")
+
+    rxn_nc_path = "/data/reactions.nc"
+    test = read_reactions_nc(d2path + rxn_nc_path)
+    print(f"TEST (problem.py): Found {len(test.keys())} reactions in $DEGAS2_DIR{rxn_nc_path}")

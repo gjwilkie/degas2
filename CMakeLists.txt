@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.12)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 project(DEGAS2 Fortran C)
+include(GNUInstallDirs)
+
+# deps/silo unconditionally forces CMAKE_INSTALL_PREFIX to its own
+# SiloInstall directory when added as a subdirectory below. Since that is
+# a single global cache variable, not scoped per-subdirectory, it would
+# otherwise hijack where this project's own "cmake --install" places its
+# targets. Save the prefix now (the user's -DCMAKE_INSTALL_PREFIX, or
+# CMake's default) so it can be restored after add_subdirectory(deps/silo).
+set(DEGAS2_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
 #enable_language (Fortran C)
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 #cmake_policy(SET CMP0074 NEW)
@@ -83,6 +92,10 @@ endif()
 
 add_subdirectory(deps/silo)
 #add_subdirectory(deps/triangle)
+
+# Restore the install prefix that deps/silo/CMakeLists.txt forces to its
+# own SiloInstall directory (see note above add_subdirectory(deps/silo)).
+set(CMAKE_INSTALL_PREFIX ${DEGAS2_INSTALL_PREFIX} CACHE PATH "Install path prefix, prepended onto install directories." FORCE)
 
 if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/silo/CMakeLists.txt")
     message(FATAL_ERROR "The submodules were not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again.")
@@ -345,7 +358,7 @@ list(APPEND btopdetector_mods  ${de_MOD} ${zn_MOD})
 list(APPEND collide_mods  ${bk_MOD} ${gi_MOD} ${pr_MOD} ${rc_MOD} ${rd_MOD} ${sp_MOD} ${zn_MOD})
 list(APPEND composite_mods  ${gi_MOD} ${zn_MOD})
 list(APPEND conversions_mods  ${bk_MOD} ${gi_MOD} ${pr_MOD} ${sp_MOD} ${tl_MOD} ${zn_MOD})
-list(APPEND cramdadd_mods  ${bk_MOD} ${pr_MOD} ${rc_MOD} ${rd_MOD} ${rf_MOD} ${sp_MOD} ${zn_MOD})
+#list(APPEND cramdadd_mods  ${bk_MOD} ${pr_MOD} ${rc_MOD} ${rd_MOD} ${rf_MOD} ${sp_MOD} ${zn_MOD})
 list(APPEND dataexam_mods  ${rc_MOD} ${xs_MOD})
 list(APPEND datamatch_mods  ${xs_MOD})
 list(APPEND dediagsetup_mods  ${de_MOD} ${gi_MOD} ${pr_MOD} ${sc_MOD} ${zn_MOD})
@@ -385,8 +398,8 @@ list(APPEND tri_to_sonnet_mods  ${g2_MOD} )
 list(APPEND postdetector_mods  ${bk_MOD} ${de_MOD} ${mp_MOD} ${ou_MOD} ${po_MOD} ${pr_MOD} ${rf_MOD} ${so_MOD} ${sp_MOD} ${tl_MOD} ${zn_MOD})
 list(APPEND problemsetup_mods  ${el_MOD} ${ma_MOD} ${mp_MOD} ${pm_MOD} ${pr_MOD} ${ps_MOD} ${rc_MOD} ${rf_MOD} ${sp_MOD})
 list(APPEND psiinterp_mods  ${ef_MOD})
-list(APPEND pvmmaster_mods  ${zn_MOD})
-list(APPEND pvmslave_mods  ${zn_MOD})
+#list(APPEND pvmmaster_mods  ${zn_MOD})
+#list(APPEND pvmslave_mods  ${zn_MOD})
 list(APPEND ratecalc_mods  ${ra_MOD} ${rf_MOD} ${xs_MOD})
 list(APPEND reaction_mods  ${bk_MOD} ${gi_MOD} ${pr_MOD} ${rc_MOD} ${rd_MOD} ${sp_MOD} ${xs_MOD} ${zn_MOD})
 list(APPEND reactionsetup_mods  ${rc_MOD} ${rf_MOD} ${sp_MOD})
@@ -409,8 +422,8 @@ list(APPEND writeback_mods  ${bk_MOD} ${el_MOD} ${g2_MOD} ${gi_MOD} ${mp_MOD} ${
 list(APPEND xgc1_gpi_mods  ${bk_MOD} ${gi_MOD} ${xi_MOD} ${zn_MOD})
 list(APPEND sysdeptest_deps sysdeptest.f)
 list(APPEND randomtest_deps randomtest.f random.f)
-list(APPEND pvmmaster_deps pvmmaster.f random.f stat.f geometry.f readfilenames.f)
-list(APPEND pvmslave_deps pvmslave.f random.f randother.f stat.f geometry.f elementread.f pmimatread.f flight.f reaction.f interpolate.f geomfront.f readfilenames.f)
+#list(APPEND pvmmaster_deps pvmmaster.f random.f stat.f geometry.f readfilenames.f)
+#list(APPEND pvmslave_deps pvmslave.f random.f randother.f stat.f geometry.f elementread.f pmimatread.f flight.f reaction.f interpolate.f geomfront.f readfilenames.f)
 list(APPEND flighttest_deps flighttest.f doflights.f elementread.f pmimatread.f geometry.f random.f stat.f randother.f reaction.f interpolate.f geomfront.f flight.f sources.f collide.f readfilenames.f plate.f degasinit.f score.f conversions.f voigt.f writeback.f aux2dsetup.f geomsetup.f geomfaces.f geomutils.f allocate.f composite.f)
 list(APPEND degas2_xgc_deps degas2_xgc.f doflights.f elementread.f pmimatread.f geometry.f random.f stat.f randother.f reaction.f interpolate.f geomfront.f flight.f sources.f collide.f readfilenames.f plate.f degasinit.f score.f conversions.f voigt.f writeback.f aux2dsetup.f geomsetup.f geomfaces.f geomutils.f allocate.f composite.f)
 list(APPEND poly_to_tri_deps poly_to_tri.f geometry.f allocate.f readfilenames.f )
@@ -426,14 +439,14 @@ list(APPEND reactionwrite_deps reactionwrite.f)
 list(APPEND pmiwrite_deps pmiwrite.f interpolate.f random.f readfilenames.f elementread.f )
 list(APPEND datasetup_deps datasetup.f elementread.f pmimatread.f elementsetup.f speciesetup.f reactionsetup.f materialsetup.f pmisetup.f readfilenames.f)
 list(APPEND problemsetup_deps problemsetup.f elementread.f pmimatread.f reaction.f interpolate.f readfilenames.f plate.f geometry.f random.f randother.f)
-list(APPEND cramdtesta_deps cramdtesta.f cramdadd.f sysdep.f string.f pmimatread.f)
+#list(APPEND cramdtesta_deps cramdtesta.f cramdadd.f sysdep.f string.f pmimatread.f)
 list(APPEND readgeometry_deps readgeometry.f geomsetup.f allocate.f geomutils.f geomfaces.f geometry.f composite.f string.f readdegas.f readfilenames.f elementread.f pmimatread.f dediagsetup.f aux2dsetup.f ${DETECTORFILE}.f)
 list(APPEND definegeometry2d_deps  string.f geomsetup.f allocate.f composite.f geomutils.f geomfaces.f geometry.f aux2dsetup.f pmimatread.f dediagsetup.f readfilenames.f plotgeom.f ${DETECTORFILE}.f)
 list(APPEND defineback_deps defineback.f string.f writeback.f pmimatread.f geometry.f elementread.f geomsetup.f aux2dsetup.f allocate.f geomutils.f geomfaces.f readfilenames.f reaction.f interpolate.f random.f composite.f ${PLASMAFILE}.f psiinterp.f )
 list(APPEND boxgen_deps boxgen.f readfilenames.f geomsetup.f allocate.f composite.f geomutils.f geomfaces.f geometry.f pmimatread.f elementread.f writeback.f cramdadd.f dediagsetup.f reaction.f interpolate.f random.f aux2dsetup.f)
-list(APPEND cramdproblem_deps cramdproblem.f pmimatread.f cramdadd.f readfilenames.f elementread.f geometry.f)
+#list(APPEND cramdproblem_deps cramdproblem.f pmimatread.f cramdadd.f readfilenames.f elementread.f geometry.f)
 list(APPEND readbackground_deps readbackground.f readdegas.f geometry.f elementread.f readfilenames.f geomsetup.f allocate.f reaction.f interpolate.f composite.f geomutils.f geomfaces.f geometry.f writeback.f pmimatread.f cramdadd.f random.f aux2dsetup.f)
-list(APPEND updatebackground_deps updatebackground.f elementread.f readfilenames.f geomsetup.f allocate.f writeback.f pmimatread.f random.f geomutils.f geometry.f geomfaces.f reaction.f interpolate.f)
+list(APPEND updatebackground_deps updatebackground.f elementread.f readfilenames.f geomsetup.f allocate.f writeback.f pmimatread.f random.f geomutils.f geometry.f geomfaces.f reaction.f interpolate.f aux2dsetup.f)
 list(APPEND reactiontest_deps reactiontest.f elementread.f reaction.f interpolate.f readfilenames.f random.f randother.f collide.f pmimatread.f geometry.f)
 list(APPEND pmitest_deps pmitest.f elementread.f pmimatread.f plate.f readfilenames.f random.f randother.f geometry.f interpolate.f)
 list(APPEND sourcetest_deps sourcetest.f sources.f readfilenames.f randother.f random.f pmimatread.f elementread.f geometry.f cramdadd.f interpolate.f score.f collide.f reaction.f conversions.f)
@@ -460,20 +473,23 @@ endforeach()
 add_executable(randomtest randomtest.f string.f sysdep.f ${randomtest_mods} ${randomtest_deps})
 target_link_libraries(randomtest ${NETCDF_LIBRARIES})
  
-foreach(str ${pvmmaster_deps})
-  string(REPLACE .f _mods modstr "${str}")
-  list(APPEND pvmmaster_mods "${${modstr}}")
-endforeach()
-add_executable(pvmmaster pvmmaster.f string.f sysdep.f ${pvmmaster_mods} ${pvmmaster_deps})
-target_link_libraries(pvmmaster ${NETCDF_LIBRARIES})
- 
-foreach(str ${pvmslave_deps})
-  string(REPLACE .f _mods modstr "${str}")
-  list(APPEND pvmslave_mods "${${modstr}}")
-endforeach()
-add_executable(pvmslave pvmslave.f string.f sysdep.f ${pvmslave_mods} ${pvmslave_deps})
-target_link_libraries(pvmslave ${NETCDF_LIBRARIES})
- 
+# pvmmaster/pvmslave use the legacy PVM library (pvmf*_ symbols), which is
+# not built/linked here and has otherwise been superseded by MPI in this
+# codebase (see USE_MPI). Disabled until PVM is wired up as a dependency.
+#foreach(str ${pvmmaster_deps})
+#  string(REPLACE .f _mods modstr "${str}")
+#  list(APPEND pvmmaster_mods "${${modstr}}")
+#endforeach()
+#add_executable(pvmmaster pvmmaster.f string.f sysdep.f ${pvmmaster_mods} ${pvmmaster_deps})
+#target_link_libraries(pvmmaster ${NETCDF_LIBRARIES})
+#
+#foreach(str ${pvmslave_deps})
+#  string(REPLACE .f _mods modstr "${str}")
+#  list(APPEND pvmslave_mods "${${modstr}}")
+#endforeach()
+#add_executable(pvmslave pvmslave.f string.f sysdep.f ${pvmslave_mods} ${pvmslave_deps})
+#target_link_libraries(pvmslave ${NETCDF_LIBRARIES})
+
 foreach(str ${flighttest_deps})
   string(REPLACE .f _mods modstr "${str}")
   list(APPEND flighttest_mods "${${modstr}}")
@@ -588,12 +604,12 @@ endforeach()
 add_executable(problemsetup problemsetup.f string.f sysdep.f ${problemsetup_mods} ${problemsetup_deps})
 target_link_libraries(problemsetup ${NETCDF_LIBRARIES})
  
-foreach(str ${cramdtesta_deps})
-  string(REPLACE .f _mods modstr "${str}")
-  list(APPEND cramdtesta_mods "${${modstr}}")
-endforeach()
-add_executable(cramdtesta cramdtesta.f string.f sysdep.f ${cramdtesta_mods} ${cramdtesta_deps})
-target_link_libraries(cramdtesta ${NETCDF_LIBRARIES})
+#foreach(str ${cramdtesta_deps})
+#  string(REPLACE .f _mods modstr "${str}")
+#  list(APPEND cramdtesta_mods "${${modstr}}")
+#endforeach()
+#add_executable(cramdtesta cramdtesta.f string.f sysdep.f ${cramdtesta_mods} ${cramdtesta_deps})
+#target_link_libraries(cramdtesta ${NETCDF_LIBRARIES})
  
 foreach(str ${readgeometry_deps})
   string(REPLACE .f _mods modstr "${str}")
@@ -623,12 +639,12 @@ endforeach()
 add_executable(boxgen boxgen.f string.f sysdep.f ${boxgen_mods} ${boxgen_deps})
 target_link_libraries(boxgen ${NETCDF_LIBRARIES})
  
-foreach(str ${cramdproblem_deps})
-  string(REPLACE .f _mods modstr "${str}")
-  list(APPEND cramdproblem_mods "${${modstr}}")
-endforeach()
-add_executable(cramdproblem cramdproblem.f string.f sysdep.f ${cramdproblem_mods} ${cramdproblem_deps})
-target_link_libraries(cramdproblem ${NETCDF_LIBRARIES})
+#foreach(str ${cramdproblem_deps})
+#  string(REPLACE .f _mods modstr "${str}")
+#  list(APPEND cramdproblem_mods "${${modstr}}")
+#endforeach()
+#add_executable(cramdproblem cramdproblem.f string.f sysdep.f ${cramdproblem_mods} ${cramdproblem_deps})
+#target_link_libraries(cramdproblem ${NETCDF_LIBRARIES})
  
 foreach(str ${readbackground_deps})
   string(REPLACE .f _mods modstr "${str}")
@@ -704,7 +720,12 @@ foreach(str ${postdetector_deps})
   string(REPLACE .f _mods modstr "${str}")
   list(APPEND postdetector_mods "${${modstr}}")
 endforeach()
-add_executable(postdetector postdetector.f string.f sysdep.f ${postdetector_mods} ${postdetector_deps})
+# postdetector.f calls gpi_views, which is only defined in gpicamera.f /
+# cmodgpi_camera4.f (neither wired into postdetector_deps, and both also
+# redefine detector_setup, conflicting with def2ddetector.f), so it fails
+# to link. Excluded from the default build until that's resolved; still
+# buildable explicitly via `make postdetector`.
+add_executable(postdetector EXCLUDE_FROM_ALL postdetector.f string.f sysdep.f ${postdetector_mods} ${postdetector_deps})
 target_link_libraries(postdetector ${NETCDF_LIBRARIES})
  
 foreach(str ${datamatch_deps})
@@ -725,7 +746,11 @@ foreach(str ${allocate_deps})
   string(REPLACE .f _mods modstr "${str}")
   list(APPEND allocate_mods "${${modstr}}")
 endforeach()
-add_executable(allocate allocate.f string.f sysdep.f ${allocate_mods} ${allocate_deps})
+# allocate.web's `program allocate` test driver is behind `@#if 0`, so
+# allocate.f has no main; exclude from the default build to avoid a link
+# failure ("undefined reference to `main'"), while still allowing an
+# explicit `make allocate` for anyone who flips that #if back on.
+add_executable(allocate EXCLUDE_FROM_ALL allocate.f string.f sysdep.f ${allocate_mods} ${allocate_deps})
 target_link_libraries(allocate ${NETCDF_LIBRARIES})
  
 
@@ -802,3 +827,117 @@ target_link_libraries(degas2_xgc ${NETCDF_LIBRARIES} ${MPI_Fortran_LIBRARIES})
 #target_link_libraries(degas2_xgc.a ${NETCDF_LIBRARIES} ${MPI_Fortran_LIBRARIES})
 #target_include_directories(degas2_xgc.a PUBLIC ${MPI_Fortran_INCLUDE_DIRS})
 target_include_directories(degas2_xgc PUBLIC ${MPI_Fortran_INCLUDE_DIRS})
+
+########################################
+# Isolate per-target .mod output directories
+#
+# Several targets compile the same *_mod.f source (e.g. pmidata_mod.f,
+# producing module pd_mod). By default CMake writes every target's .mod
+# files into the same top-level binary directory, so a parallel build
+# (make -j) can have two targets compiling the same module name at once
+# and racing on the same .mod file (gfortran: "Cannot delete temporary
+# module file"). Giving each executable its own module directory avoids
+# the race. OBJECT libraries (triangle, bspline90_22, aladdin, dg2dc) are
+# excluded: their modules (e.g. bspline90_22's "bspline") are consumed by
+# other targets via $<TARGET_OBJECTS:...>, which does not propagate
+# per-target module include paths, so they must keep writing to the
+# shared default location that those consumers already search.
+get_property(DEGAS2_MODDIR_TARGETS DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
+foreach(target ${DEGAS2_MODDIR_TARGETS})
+   get_target_property(target_type ${target} TYPE)
+   if(target_type STREQUAL "EXECUTABLE" OR target_type STREQUAL "SHARED_LIBRARY" OR target_type STREQUAL "STATIC_LIBRARY")
+      set_target_properties(${target} PROPERTIES
+         Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${target})
+   endif()
+endforeach()
+
+# efit2dg2d and defineback pull in bspline90_22's object files directly
+# (see $<TARGET_OBJECTS:bspline90_22> above) and `use` its modules, so
+# they need bspline90_22's (unmodified, shared) module directory on
+# their include path now that their own module directory is separate.
+target_include_directories(efit2dg2d PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(defineback PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+########################################
+# Installation
+#
+# Every executable and library defined above in this directory that is
+# actually part of the default build is installed. OBJECT libraries
+# (triangle, bspline90_22, aladdin, dg2dc) are intermediate build
+# artifacts and are skipped since they cannot be installed on their own;
+# targets marked EXCLUDE_FROM_ALL (e.g. postdetector, allocate) are
+# skipped too, since "make install" would otherwise fail trying to
+# install a binary that was never built. degas2_xgc is installed
+# separately below, as part of the find_package(degas2) export set.
+get_property(DEGAS2_ALL_TARGETS DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
+set(DEGAS2_INSTALL_TARGETS)
+foreach(target ${DEGAS2_ALL_TARGETS})
+   get_target_property(target_type ${target} TYPE)
+   get_target_property(target_excluded ${target} EXCLUDE_FROM_ALL)
+   if((target_type STREQUAL "EXECUTABLE" OR target_type STREQUAL "SHARED_LIBRARY" OR target_type STREQUAL "STATIC_LIBRARY")
+         AND NOT target_excluded AND NOT target STREQUAL "degas2_xgc")
+      list(APPEND DEGAS2_INSTALL_TARGETS ${target})
+   endif()
+endforeach()
+
+install(TARGETS ${DEGAS2_INSTALL_TARGETS}
+   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+# Downstream projects (e.g. codes linking degas2_xgc) locate reaction,
+# PMI, and other reference data relative to an installed "data" directory,
+# so it is installed alongside the executables and libraries.
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/
+   DESTINATION ${CMAKE_INSTALL_DATADIR}/degas2/data
+)
+
+########################################
+# find_package(degas2) support
+#
+# degas2_xgc is the piece downstream projects actually link against, so
+# it (alone, not the executables above) is installed as part of a CMake
+# export set. It is kept out of the bulk install(TARGETS) call above
+# because some of the other executables (geomtesta, definegeometry2d,
+# ucd_plot) have PUBLIC include directories pointing inside this source
+# tree (deps/silo/src/silo), which install(EXPORT) rejects as invalid
+# for an installed package; degas2_xgc's own PUBLIC include directories
+# only reference the external MPI installation, so it is safe to export.
+install(TARGETS degas2_xgc
+   EXPORT degas2Targets
+   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(EXPORT degas2Targets
+   FILE degas2Targets.cmake
+   NAMESPACE degas2::
+   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/degas2
+)
+
+# DEGAS2_DATA_DIR is exposed to downstream find_package(degas2) callers so
+# they can locate the installed data/ directory without hardcoding a path
+# relative to the degas2_xgc library or executables.
+include(CMakePackageConfigHelpers)
+set(DEGAS2_DATA_DIR ${CMAKE_INSTALL_DATADIR}/degas2/data)
+configure_package_config_file(
+   ${CMAKE_SOURCE_DIR}/cmake/degas2Config.cmake.in
+   ${CMAKE_CURRENT_BINARY_DIR}/degas2Config.cmake
+   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/degas2
+   PATH_VARS DEGAS2_DATA_DIR
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/degas2Config.cmake
+   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/degas2
+)
+
+# The Python helper modules are not a pip-installable package (no
+# setup.py/__init__.py); per the README they are meant to be added to
+# PYTHONPATH directly, so they are installed as plain files rather than
+# via a Python packaging tool. "archive" holds deprecated scripts and
+# is excluded.
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/scripts/
+   DESTINATION ${CMAKE_INSTALL_DATADIR}/degas2/scripts
+   PATTERN "archive" EXCLUDE
+)

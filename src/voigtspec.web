@@ -21,7 +21,7 @@
       integer num_bins,ibin,length,p,b,e        // Local
       real lambda_min,lambda_max,delta_lambda,lambda0,m_i,t_i,
      $     vth,delta_lam_d,density,delta_lam_s,check_tot,
-     $     lambda,x,y,signal,check_tot
+     $     lambda,x,y,signal
       character*LINELEN line          
 
       real voigt                               // External

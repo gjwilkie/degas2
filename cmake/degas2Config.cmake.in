@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/degas2Targets.cmake")
+
+set_and_check(DEGAS2_DATA_DIR "@PACKAGE_DEGAS2_DATA_DIR@")

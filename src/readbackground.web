@@ -147,6 +147,7 @@ in this file is needed to relate the stratum labels in the
 @I netcdf.hweb
 @I sector.hweb
 @I materials.hweb
+@I mpi.hweb
 
 @ The unnamed module.
 @f namelist integer
@@ -187,10 +188,11 @@ in this file is needed to relate the stratum labels in the
 @#if 0
       integer i,ii
 @#endif
+      @<Memory allocation interface@>
+
 @#if MPI
       mpi_init
 @#endif
-      @<Memory allocation interface@>
 
       call readfilenames
       

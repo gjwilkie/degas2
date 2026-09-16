@@ -87,6 +87,9 @@ class Source:
                                 the strength and stratum args are made to be the same len as the resulting list.
                     "100 200" = this is the format expected by defineback, in this case 'segment' is temporarily
                                 reverted to [int, int] format to assert the shape of strength and stratum.
+                    "100:200+10:20" = if a plus sign is present in the string, the segment string is split apart
+                                and multiple series of segments are combined. NOTE: "10+20" is the same as "10 20".
+                                This plus-sign functionality was introduced to combine disjointed ranges.
         """
         # Sanitize inputs,
         if not isinstance(strength, list):
@@ -101,6 +104,39 @@ class Source:
                 self.strength = str(strength[0]) # can be float
                 self.stratum = str(int(stratum[0])) # must be int.
                 return
+            elif "+" in segment:
+                # Split apart by plus sign to handle disjointed sequences
+                # e.g. '100:200+10:20' --> ['100:200', '10:20']
+                parts = segment.split("+")
+                combined_segments = []
+                for part in parts:
+                    part = part.strip()
+                    if ":" in part:
+                        s1, s2 = [int(s) for s in part.split(":")]
+                        combined_segments.extend(list(range(s1, s2)))
+                    elif " " in part:
+                        combined_segments.extend([int(s) for s in part.split(" ") if s])
+                    elif part:
+                        combined_segments.append(int(part))
+                
+                segment = combined_segments
+                segment.sort() # DEGAS2 may expect the segments in order.
+                N = len(segment)
+                
+                if len(strength) != N:
+                    if self.specify_units == "specify_flux":
+                        strength = [float(strength[0])] * N
+                    elif self.specify_units == "specify_current":
+                        strength = [float(strength[0]) / N] * N
+                
+                if len(stratum) != N:
+                    stratum = [stratum[0]] * N
+                
+                self.segment = " ".join([f"{int(s)}" for s in segment])
+                self.strength = " ".join([f"{s:.3e}" for s in strength])
+                self.stratum = " ".join([f"{int(s)}" for s in stratum])
+                return # all done.
+            
             elif ":" in segment:
                 # start:end case,
                 s1, s2 = [ int(s) for s in segment.split(":") ]
@@ -121,7 +157,7 @@ class Source:
                 self.segment = " ".join([f"{int(s)}" for s in segment])
                 self.strength = " ".join([f"{s:.3e}" for s in strength])
                 self.stratum = " ".join([f"{int(s)}" for s in stratum])
-                return
+                return # all done.
             else:
                 # Assume the user has given a valid string, e.g. "i1 i2 i3"
                 # Convert to the input expected by this class,
@@ -143,7 +179,7 @@ class Source:
         self.strength = " ".join([f"{s:.3e}" for s in strength])
         self.stratum = " ".join([f"{int(s)}" for s in stratum])
 
-        return
+        return    
 
     def check_segments(self, max_line_len=275, sourcefile="sourcefile.txt"):
         """ Method to check the segment/strength/stratum data and reformat if needed into a sourcefile.

@@ -199,6 +199,9 @@ if run_definegeometry2d:
         )
         # NOTE: psifunc is still defined from above.
     else:
+        # Use the new DG2D class to deal with cases direct from a gEQDSK file...
+        # dg2d.setup(material, recyc, gfile=geqdsk_file, walltemp=walltemp, run_dg2d=False)
+	    # OLD...
         # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
         # the psifunc is used later when we run defineback.
         psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)

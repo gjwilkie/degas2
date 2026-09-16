@@ -344,6 +344,7 @@ def setup(material,Rcoeff,Rlim=None,Zlim=None,gfile=None,bpfile=None,triang=None
     if Rlim != None:
         self.define_limiter(Rlim,Zlim)
     elif gfile != None:
+        from geomutils import read_geqdsk
         g = read_geqdsk(gfile)
         Rlim = g.lim[:,0]
         Zlim = g.lim[:,1]

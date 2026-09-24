@@ -561,7 +561,6 @@ this ``equivalence'' is defined in the species input file.
       sub_section=sec_name
 
 loop1: continue
-
       if (!read_string(diskin,line,length)) go to eof
       assert(length<=len(line))
       length=parse_string(line(:length))
@@ -694,7 +693,6 @@ eof: continue
          assert(' Unknown independent variable' == ' ')
       end if
          
-
 @ Conversions section.
 @<Conversions@>=
       assert(next_token(line(:length),b,e,p))
@@ -710,7 +708,7 @@ eof: continue
          assert(line(b:e) == ':')
          assert(next_token(line(:length),b,e,p))
 /*
-   Currently have syntax only for 1 partner
+   Currently have syntax only for 1 partner 
 */
          conversion_packages[conversions[num_conversions]][cv_partner_1]
      $       =string_lookup(line(b:),tally_name,tl_num)

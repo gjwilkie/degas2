@@ -310,7 +310,7 @@ D2ROOT/data/h2dision_jcr.nc
 dissoc
 
 Molecular hydrogen ion dissociation with CR effects
-h2pdis_jcr e + H2+ -> e + H+ + H  *
+h2pdis_jcr e + H2+ -> e + H+ + H * 
 D2ROOT/data/h2pdis_jcr.nc
 dissoc
 
@@ -321,7 +321,7 @@ dissoc
 
 molecular hydrogen ion dissociative recombination with CR effects
 h2pdisrec_jcr e + H2+ -> H + H *
-D2ROOT/data/h2pdisrec.nc
+D2ROOT/data/h2pdisrec_jcr.nc
 dissoc_rec
 
 deuterium charge exchange acting as a loss

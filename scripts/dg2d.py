@@ -8,7 +8,7 @@ import scipy.interpolate as interpolate
 import netCDF4 as nc
 import matplotlib.tri as mtri
 import subprocess
-from tqdm import tqdm
+#from tqdm import tqdm
 
 class DG2D:
     """ 
@@ -343,6 +343,7 @@ def setup(material,Rcoeff,Rlim=None,Zlim=None,gfile=None,bpfile=None,triang=None
     if Rlim != None:
         self.define_limiter(Rlim,Zlim)
     elif gfile != None:
+        from geomutils import read_geqdsk
         g = read_geqdsk(gfile)
         Rlim = g.lim[:,0]
         Zlim = g.lim[:,1]
@@ -376,7 +377,6 @@ def setup(material,Rcoeff,Rlim=None,Zlim=None,gfile=None,bpfile=None,triang=None
 
     if run_dg2d:
         subprocess.run(bindir+"definegeometry2d dg2d.in",shell=True)
-
 
 
 def get_first_idx(vertex_list):
@@ -1050,24 +1050,53 @@ def write_dg2d_input_from_triangle_file(trifile_base,material,recyc,dg2dfile_nam
 
     return ne_zone, Te_zone/1.602e-19, Ti_zone/1.602e-19, strata, segments, source_strength, zone_map
 
-def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.0,minarea=-1.0,dg2dfile_name="dg2d.in",polygon_filename="polygons.nc",debug=False,def_separatrix=False,clockwise=False,exitnodes=[]):
+def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.0,minarea=-1.0,dg2dfile_name="dg2d.in",
+                                      polygon_filename="polygons.nc",debug=False,def_separatrix=False,clockwise=False,exitnodes=[]):
+    """ Function to write the 'dg2d.in' file from 'wallfile.txt' containing a single wall.
 
+    Args:
+        wallfile_name: string filename for the wallfile. (usually='wallfile.txt')
+        mat: string wall material name.
+        recyc: (float) recycling coefficient.
+        walltemp: (float, optional) temperature of wall in Kelvin.
+        minarea: (float, optional) ???
+        dg2dfile_name: (str, optional) 
+        polygon_filename: (str, optional)
+        debug: (bool, optional)
+        def_separatrix: (bool, optional)
+        clockwise: (bool, optional)
+        exitnodes: (list, optional)
+    Returns:
+        polys: 
+        wall:
+        if def_separatrix:
+            Rcoords_sep:
+            Zcoords_sep:
+    """
     # Read the wallfile
     wallfile = open(wallfile_name,'r')
-
+    
     def next_noncomment_line(f):
+        """ local helper function to incrementally read lines from a file.
+        In DEGAS2, lines beginning with whitespace or '#' are comments.
+        """
         found=False
         while not found:
-            line = wallfile.readline().strip()
+            line = f.readline().strip()
             if not line[0] == '#':
                 found = True
         return line
 
-    # This function only cares about the first wall
+    # As per the definegeometry2d docs,
+    #   the first line is the number of walls.
     nwalls = int(next_noncomment_line(wallfile))
+    #   the next line(s) indicate the number of points comprising each wall.
+    #   e.g. 100 200 100 # for three walls.
     line = next_noncomment_line(wallfile).split()
+    # We only consider the first wall here,
+    npoints = int(line[0]) 
 
-    npoints = int(line[0])
+    # If a second wall is given, it's taken to define the separatrix, 
     if def_separatrix:
         npoints_sep = int(line[1])
 
@@ -1120,14 +1149,12 @@ def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.
     dg2dfile.write("symmetry cylindrical\n")
 
     ####################################
-    # Find and write appropriate bounds
-    #Rcoords = walls[0].vertices[:].coords[0]
-    #Zcoords = walls[0].vertices[:].coords[1]
+    # Find and write appropriate bounds for the universal cell,
+    # Xmin Xmax Zmin Zmax (for 2d cases)
     Rrange = np.amax(Rcoords) - np.amin(Rcoords)
     Zrange = np.amax(Zcoords) - np.amin(Zcoords)
     Zmin = np.amin(Zcoords) - Zrange
     Zmax = np.amax(Zcoords) + Zrange
-#    Rmin = max(np.amin(Rcoords) - 0.8*Rrange, 0.2*np.amin(Rcoords))
     Rmin = max(0.0001,0.5*np.amin(Rcoords))
     Rmax = np.amax(Rcoords) + Rrange
     dg2dfile.write("bounds     %f %f    %f %f \n" % (Rmin, Rmax, Zmin, Zmax))
@@ -1138,7 +1165,10 @@ def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.
 
     dg2dfile.write("end_prep\n")
     dg2dfile.write("\n")
-
+    # End of dg2d.in preparatory section.
+    ####################################
+    # Start of dg2d.in construction section.
+    
     poly.write_plasma_polygon_dg2d(dg2dfile,minarea=minarea,wallid=1,debug=debug)
 
     if exitnodes == []:
@@ -1207,8 +1237,31 @@ def refine_limiter(r_in,z_in,maxdist):
                     znew.append(znew[-1]+dist*unit[1])
     return rnew, znew
 
+def refine_limiter_interp(r, z, maxdist):
+    """ Alternative method using interpolation to refine the limiter.
+    Args:
+        r: List of floats
+        z: List of floats
+        maxdist: Float, 
+    Returns:
+        rnew: List of floats
+        znew: List of floats
+    """
+    r = np.array(r)
+    z = np.array(z)
+    d = np.cumsum(np.sqrt(np.diff(r)**2 + np.diff(z)**2))
+    d = np.concatenate(([0],d)) # parameterize limiter curve by distance
+    # New target grid based on maxdist
+    dl = 0.9*maxdist
+    di = np.arange(0, max(d) + dl, dl)
+    rnew = np.interp(di, d, r, period=max(d))
+    znew = np.interp(di, d, z, period=max(d))
 
-def generateGeometryFromEFITfile(efitfile,mat,recyc_coef=1.0,Twall=300.0,wfilename="wallfile.txt",clockwise=False,dlim_max=0.05):
+    return rnew.tolist(), znew.tolist()
+
+def generateGeometryFromEFITfile(efitfile,mat,recyc_coef=1.0,Twall=300.0,wfilename="wallfile.txt",
+                                 clockwise=False,RZlim_start=None,def_separatrix=False,
+                                 dlim_max=0.05,dsep_max=0.05,minarea=-1.0):
     """
     Writes dg2d.in from an EFIT g file using definegeometry2d's built-in triangulation.
 
@@ -1219,54 +1272,121 @@ def generateGeometryFromEFITfile(efitfile,mat,recyc_coef=1.0,Twall=300.0,wfilena
         Twall: (optional) float for temperature of wall in Kelvin.
         wfilename: (optional) string for the name of the "wallfile". Included for compatibility with legacy scripts.
         clockwise: (optional) boolean flag for whether the limiter points in g file are clockwise or not. Default False.
-        dlim_max: (optional) float for maximum distance between limiter points in meters. Used to refine triangulation near wall.
+        RZlim_start: (optional) [R, Z] point at which to start writing the limiter.
+                     The closest point on the limiter is used to roll the rlim, zlim arrays after refinement.
+        def_separatrix: (bool, optional) pased to write_dg2d_input_from_single_wall
+        dlim_max: (float, optional) float for maximum distance between limiter points in meters. Used to refine triangulation near wall.
+        dsep_max: (float, optional) float for maximum distance between separatrix points in meters. Used to refine triangulation near separatrix.
+        minarea: (float, optional) passed to write_dg2d_input_from_single_wall
     Returns:
         psi_func: function that takes R,Z  as arguments and returns normalized psi coordinate
         nodes: list of Vertices representing the wall. Used to pass to other routines.
     """
+    # ----------------
+    # read_geqdsk() returns a class with attrs read from the EFIT gEQDSK file. 
     g = geomutils.read_geqdsk(efitfile)
     rlim = g.lim[:,0]
     zlim = g.lim[:,1]
+    print(f"gEQDSK limiter has {len(rlim)} points")
     rgrid = g.rgrid
     zgrid = g.zgrid
+    # Defines psi_n(R,Z) = (psi - min(psi))/(max(psi) - min(psi)), Normalized poloidal flux.
     psi_rz = (g.psirz-g.ssimag)/(g.ssibry-g.ssimag)
-
-    rlim,zlim = refine_limiter(rlim,zlim,dlim_max)
-
+    
     # R = list of R points, Z list of Z point
     def psi_func(R,Z):
-        f= interpolate.interp2d(rgrid, zgrid, np.transpose(psi_rz), kind='cubic')
-#        f= interpolate.interp2d(rgrid, zgrid, psi_rz, kind='cubic')
+        # interp2d is deprecated, use RectBivariateSpline, 
+        f = interpolate.RectBivariateSpline(rgrid, zgrid, psi_rz.T)
         return f(R,Z)[0]
 
-    xmin = 0.5*np.min(rlim)
-    xmin = max(xmin,1.0e-4)
-    xmax = 1.5*np.max(rlim)
-    dz = np.max(zlim) - np.min(zlim)
-    zmin = np.max(zlim) + 0.5*dz
-    zmin = np.min(zlim) - 0.5*dz
-
-    Nlim = len(rlim)
+    # ----------------
+    # refine/reorient the limiter,
+    rlim, zlim = refine_limiter_interp(rlim,zlim,dlim_max)
+    N_lim = len(rlim)
+    print(f"refined limiter has {N_lim} points")
+    
+    if RZlim_start is not None:
+        print(f"* finding point closest to: {RZlim_start}")
+        rlim = np.array(rlim)
+        zlim = np.array(zlim)
+        dist = np.sqrt((rlim - RZlim_start[0])**2 + (zlim - RZlim_start[1])**2)
+        i_start = np.argmin(dist) 
+        # roll such that i_start = 0
+        rlim = np.roll(rlim, -i_start)
+        zlim = np.roll(zlim, -i_start)
+        rlim = rlim.tolist()
+        zlim = zlim.tolist()
+        print(f"* limiter starts at: [{rlim[0]:.3f},{zlim[0]:.3f}]")
+            
+    # ----------------
+    # Open and begin writing the wallfile,
     wallfile = open(wfilename,"w")
     wallfile.write("# Wallfile automatically generated by script\n")
-    wallfile.write("1\n")
+    
+    N_walls = 1 if not def_separatrix else 2
+    wallfile.write(f"{int(N_walls)}\n") # First line= number of walls in the file (=1)
     wallfile.write("#\n")
-    nodes = []
-    for i in range(0,Nlim):
-        if (i > 0 and ((rlim[i]-rlim[i-1])**2 + (zlim[i]-zlim[i-1])**2 > 1.0e-6) and ((rlim[i]-rlim[0])**2 + (zlim[i]-zlim[0])**2 > 1.0e-6)) or i==0:
-            nodes.append(Vertex(i,rlim[i],zlim[i]))
-    Nlim = len(nodes)
-    wallfile.write("%d\n"%(Nlim))
+    # For each limiter point,
+    #   if the i'th point is a unique point (not overlapping with prev or next point) OR i==0,
+    #       add it to a list of 'nodes' containing Vertex objects.
+    wall_nodes = []
+    for i in range(0,N_lim):
+        if i == 0:
+            # Always write the 0th point,
+            wall_nodes.append(Vertex(i, rlim[i], zlim[i]))
+        else:
+            # Store only unique limiter points,
+            if ((rlim[i]-rlim[i-1])**2 + (zlim[i]-zlim[i-1])**2 > 1.0e-6) and ((rlim[i]-rlim[0])**2 + (zlim[i]-zlim[0])**2 > 1.0e-6):
+                wall_nodes.append(Vertex(i,rlim[i],zlim[i]))
+    N_wall_nodes = len(wall_nodes)
+    print(f"found {N_wall_nodes} valid wall nodes")
+    N_total_points = [N_wall_nodes]
+
+    if def_separatrix:
+        # Get the separatrix directly from gEQDSK file,
+        rsep = g.sep[:,0]
+        zsep = g.sep[:,1]
+        N_sep = len(rsep)
+        print(f"gEQDSK separatrix has {N_sep} points")
+        rsep, zsep = refine_limiter_interp(rsep, zsep, dsep_max)
+        N_sep = len(rsep)
+        print(f"Refined separatrix has {N_sep} points")
+        sep_nodes = []
+        for i in range(0,N_sep):
+            if i == 0:
+                # Always write the 0th point,
+                sep_nodes.append(Vertex(i, rsep[i], zsep[i]))
+            else:
+                # Store only unique separatrix points,
+                if ((rsep[i]-rsep[i-1])**2 + (zsep[i]-zsep[i-1])**2 > 1.0e-6) and ((rsep[i]-rsep[0])**2 + (zsep[i]-zsep[0])**2 > 1.0e-6):
+                    sep_nodes.append(Vertex(i,rsep[i],zsep[i]))
+        # ---
+        N_sep_nodes = len(sep_nodes)
+        print(f"found {N_sep_nodes} valid separatrix nodes")
+        N_total_points += [N_sep_nodes]
+        
+    # Next line(s)= number of points comprising each wall.
+    line = " ".join([f"{int(n)}" for n in N_total_points])
+    wallfile.write(f"{line}\n") 
     wallfile.write("#\n")
-    for i in range(0,Nlim):
-        if (i > 0 and ((rlim[i]-rlim[i-1])**2 + (zlim[i]-zlim[i-1])**2 > 1.0e-6) and ((rlim[i]-rlim[0])**2 + (zlim[i]-zlim[0])**2 > 1.0e-6)) or i==0:
-            wallfile.write("%f %f\n"%(nodes[i].coords[0],nodes[i].coords[1]))
+    count = 0
+    for i in range(0,N_wall_nodes):
+        wallfile.write("%f %f\n"%(wall_nodes[i].coords[0],wall_nodes[i].coords[1]))
+        count += 1
+    if def_separatrix:
+        for i in range(0,N_sep_nodes):
+            wallfile.write("%f %f\n"%(sep_nodes[i].coords[0],sep_nodes[i].coords[1]))
+            count += 1
+            
     wallfile.close()
+    print(f"wrote {count} floats to wallfile")
 
-    polys,wall=write_dg2d_input_from_single_wall(wfilename,mat,recyc_coef,walltemp=Twall,minarea=-1.0,dg2dfile_name="dg2d.in",polygon_filename="polygons.nc",debug=False,exitnodes=[],def_separatrix=False,clockwise=clockwise)
+    polys, wall = write_dg2d_input_from_single_wall(wfilename,mat,recyc_coef,walltemp=Twall,minarea=minarea,
+                                                    dg2dfile_name="dg2d.in",polygon_filename="polygons.nc",
+                                                    debug=False,exitnodes=[],def_separatrix=def_separatrix,
+                                                    clockwise=clockwise)
 
-#    return psi_func, nodes, g.R0
-    return psi_func, nodes
+    return psi_func, wall_nodes
 
 def generateSimpleCylinderGeometry(rgrid,material,Twall,recyc,Lz=None,wallfile_name="wallfile.txt",dg2dfile_name="dg2d.in"):
     if not Lz:

@@ -158,13 +158,16 @@ def get_zone_plasma_data_through_psi(zone_coords,ne_data,Te_data,psifunc,psi_dat
     Te_zone = []
 
     for point in zone_coords:
-        psi = psifunc(point[0],point[1])
+        # scipy.interpolate.RectBivariateSpline returns an ndim=2 array for scalar input. 
+        psi = np.squeeze(psifunc(point[0],point[1]))
         ne_zone.append(ne_func(psi))
         Te_zone.append(Te_func(psi))
 
     return ne_zone, Te_zone
 
-def write_plasmafile(ne_zone,Te_zone,Ti_zone,ui_zone=None,b=None,plasmafilename="plasmafile.txt",ux_zone=None,uy_zone=None,uz_zone=None):
+def write_plasmafile(ne_zone,Te_zone,ni_zone,Ti_zone,ui_zone=None,b=None,plasmafilename="plasmafile.txt",ux_zone=None,uy_zone=None,uz_zone=None):
+    """ Function responsible for actually writing the degas2 plasmafile.txt.
+    """
     pfile = open(plasmafilename,'w')
     pfile.write("zone      T(1)         N(1)        T(2)        N(2)")
     if (not ui_zone is None) or (not ux_zone is None):
@@ -174,7 +177,7 @@ def write_plasmafile(ne_zone,Te_zone,Ti_zone,ui_zone=None,b=None,plasmafilename=
     Nzone = len(ne_zone)
     for idx in range(0,Nzone):
         pfile.write(str(idx+1)+"  "+str(Te_zone[idx])+"  "+str(ne_zone[idx])
-                +"  "+str(Ti_zone[idx])+"  "+str(ne_zone[idx]))
+                +"  "+str(Ti_zone[idx])+"  "+str(ni_zone[idx]))
         if not ux_zone is None:
             ux = ux_zone[idx]
             uy = uy_zone[idx]
@@ -583,10 +586,33 @@ def generate_plasma_file(R_data,Z_data,ne_data,Te_data,TiTe_ratio,psifunc,geomfi
 #   TiTe_ratio: a float value that provides Ti/Te, used to infer Ti from Te uniformly. To eventually replace with a separate array.
 #   psifunc: a function passed as an argument. This function should take R,Z as arguments and return psi
 #   plasmafilename (optional): the name and/or path of the plasma file to write
-def generate_plasma_file_through_psi(ne_data,Te_data,Ti_data,psifunc,geomfilename="geometry.nc",bfieldfilename=None,ionmass=1.66e-27,plasmafilename="plasmafile.txt",sourcefilename="sourcefile.txt",R_data=None,psi_data=None,rot_data=None):
-
+def generate_plasma_file_through_psi(ne_data,Te_data,Ti_data,psifunc,geomfilename="geometry.nc",bfieldfilename=None,
+                                     ionmass=1.66e-27,plasmafilename="plasmafile.txt",sourcefilename="sourcefile.txt",
+                                     R_data=None,psi_data=None,rot_data=None,ni_data=None):
+    """ Function to generate a plasmafile for use in defineback.
+        This is the proimary function to create a background plasma given 1D profiles.
+    Args:
+        ne_data: (1D array-like)
+        Te_data: (1D array-like)
+        Ti_data: (1D array-like)
+        psifunc: (callable)
+    Kwargs:
+        geomfilename: (str)
+        bfieldfilename: (str or None)
+        ionmass: (float)
+        plasmafilename: (str)
+        sourcefilename: (str)
+        R_data: (1D array-like or None)
+        psi_data: (1D array-like or None)
+        rot_data: (1D array-like or None)
+	ni_data: (1D array-like or None) if None, ni = ne.
+    """
+    if ni_data is None:
+        ni_data = ne_data
+    # ----------------
+    # Load information from the DEGAS2 geometry.nc file
     ncdata = nc.Dataset(geomfilename)
-    zone_coords_3D = ncdata["zone_center"]
+    zone_coords_3D = ncdata["zone_center"] # (N_zone, 3) ~ [x,y,z] of each zone center.
     zone_type = ncdata["zone_type"]
     plasma_sector = ncdata["plasma_sector"]
     sector_zone = ncdata["sector_zone"]
@@ -594,6 +620,8 @@ def generate_plasma_file_through_psi(ne_data,Te_data,Ti_data,psifunc,geomfilenam
     sector_strata_segment = ncdata["sector_strata_segment"]
     sector_points = ncdata["sector_points"]
 
+    # ----------------
+    # Unpack 
     zone_coords = []
     zone_idx = []
     for point in range(0,len(zone_coords_3D)):
@@ -611,10 +639,10 @@ def generate_plasma_file_through_psi(ne_data,Te_data,Ti_data,psifunc,geomfilenam
    
     if R_data == None:
         ne_zone, Te_zone = get_zone_plasma_data_through_psi(zone_coords,ne_data,Te_data,psifunc,psi_data=psi_data)
-        ni_zone, Ti_zone = get_zone_plasma_data_through_psi(zone_coords,ne_data,Ti_data,psifunc,psi_data=psi_data)
+        ni_zone, Ti_zone = get_zone_plasma_data_through_psi(zone_coords,ni_data,Ti_data,psifunc,psi_data=psi_data)
     else:
         ne_zone, Te_zone = get_zone_plasma_data_through_psi(zone_coords,R_data,ne_data,Te_data,psifunc,R_data=R_data)
-        ne_zone, Ti_zone = get_zone_plasma_data_through_psi(zone_coords,R_data,ne_data,Ti_data,psifunc,R_data=R_data)
+        ni_zone, Ti_zone = get_zone_plasma_data_through_psi(zone_coords,R_data,ni_data,Ti_data,psifunc,R_data=R_data)
 
     if rot_data != None:
         rot_func = interpolate.interp1d(psi_data,rot_data,fill_value=(rot_data[0],rot_data[-1]))
@@ -675,7 +703,7 @@ def generate_plasma_file_through_psi(ne_data,Te_data,Ti_data,psifunc,geomfilenam
 
         write_sourcefile(sourcefilename,ne_zone,vpar_zone,area_zone,plasma_sector,sector_strata_segment,sector_zone,strata)
 
-    write_plasmafile(ne_zone,Te_zone,Ti_zone,ux_zone=ux_zone,uy_zone=uy_zone,uz_zone=uz_zone,plasmafilename=plasmafilename)
+    write_plasmafile(ne_zone,Te_zone,ni_zone,Ti_zone,ux_zone=ux_zone,uy_zone=uy_zone,uz_zone=uz_zone,plasmafilename=plasmafilename)
 
 
 def write_cylindrical_polygon_input(rgrid,ne,Te,TiTe_ratio,S0,R_tot,NR,Nflights,walltemp=300.0,source_sp="H2",plasmafilename="plasmafile.txt",sourcefilename="sourcefile.txt"):

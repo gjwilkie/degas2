@@ -282,6 +282,10 @@ class Polygon:
             f.write("new_zone plasma\n")
         f.write("new_polygon\n")
         f.write("  stratum "+str(stratum)+"\n")
+        # For each point write:
+        #   wall {i_wall}, {j_start}, {j_end}
+        # Takes points from the i'th wall in the wallfile and adds them to this polygon.
+        # With j_start=j_end, a single point is added.
         for vertex in self.vertices:
             if not vertex.wall_id:
                 f.write("  wall "+str(wallid)+" "+str(vertex.id)+" "+str(vertex.id)+"\n")
@@ -292,10 +296,12 @@ class Polygon:
             f.write("  print_polygon poly."+str(self.id)+".dat\n")
             f.write("  clear_polygon\n")
         elif commonzone:
+            # triangulate_polygon is only recommended for solid zones.
             f.write("  triangulate_polygon\n")
-        else:
+        else: 
             f.write("  triangulate_to_zones\n")
         if minarea > 0.0:
+            print(f"Setting minarea={minarea:.1e}")
             f.write("  triangle_area "+str(minarea)+"\n")
 
         f.write("\n")

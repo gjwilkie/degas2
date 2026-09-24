@@ -10,6 +10,150 @@ from scipy.spatial import Delaunay
 import scipy.special as sp
 import netCDF4 as nc
 import sys
+import os
+import f90nml
+import problem
+import source
+import subprocess
+import postprocess
+
+def setup_xgc_case(meshbase=None,d2_dir=None,wall_material="C",wall_temperature=300.0,runtest=False,skipgeo=False,aux_thickness=0.002):
+    """
+    Given XGC inputs, constructs DEGAS2 datafiles in working directory.
+    Requires the executables: problemsetup, definegeometry2d, defineback, tallysetup
+    Args:
+        meshbase (partially required): string for the basename of the geometry files, shared by .ele and .node triangulation files. Include full relative path (e.g. "input_dir"). If not provided, will look for xgc.mesh.bp locally. 
+        d2_dir (partially required): string for the absolute path of the degas2 installation. Assumes the build directory is populated with appropriate executables equipped with the required synthetic diagnostics. If this is not given, the user is assumed to have copied degas2.in and tally.in from the degas2/data/templates directory to the local working directory AND have degas2/scripts in their PYTHONPATH.
+        wall_material (optional): string for the wall material, as specified in degas2 problem inputs. Defaults to "C" for graphite.
+        wall_temperature (optional): float for the wall temperature in Kelvin; determines the energy of desorbed products. Defaults to 300.
+    """
+
+    adios2meshfile = "xgc.mesh.bp"
+    if os.path.isdir(adios2meshfile):
+        rz, conn,wallnodes = get_bp_mesh(filename=adios2meshfile)
+    elif meshbase == None:
+        raise Exception("If xgc.mesh.bp is not present, meshbase must be specified to find the triangulation files in input_dir.")
+    else:
+        rz, conn, wallnodes = get_tri_mesh(meshbase)
+
+    Nwall = len(wallnodes)
+    Ntri = len(conn[:,0])
+    Nnode = len(rz[:,0])
+
+    nml = f90nml.read('input')
+    ionmass = nml["ptl_param"]["ptl_mass_au"][1]
+    Rcoeff = nml["neu_param"]["neu_recycle_rate"]
+    try:
+        ebin_min = nml["neu_param"]["neu_ebin_min"]
+    except:
+        ebin_min = 0.1
+    try:
+        ebin_max = nml["neu_param"]["neu_ebin_max"]
+    except:
+        ebin_max = 100.0
+    try: 
+        ebin_num = nml["neu_param"]["neu_ebin_num"]
+    except:
+        raise Exception("neu_ebin_num is a required input to override default of 1.")
+    try: 
+        ebin_log = nml["neu_param"]["neu_ebin_log"]
+    except:
+        ebin_log = True
+
+    spec = gen_problem_for_xgc(wall_material,ionmass)
+
+    if not skipgeo:
+        print("Generating geometry input...")
+        g = dg2d.DG2D()
+        g.define_mesh(rz,conn,progress=True)
+        g.set_wallprops(walltemp=wall_temperature,Rcoeff=Rcoeff,material=wall_material)
+        g.write_polygonfile = False
+        g.write_files(aux_thickness=aux_thickness)
+        print("Running definegeometry2d...")
+        subprocess.run(d2_dir+"definegeometry2d dg2d.in",shell=True)
+
+    write_dummy_bg_files_aux(Ntri,Nwall,Ntri+1)
+    if runtest:
+        sgroup = source.Source(10000,"plate",spec,spec+"+",specify_flux=False,sourcefile="sourcefile.txt")
+    else:
+        sgroup = source.Source(10000,"plt_e_bins",spec,spec+"+",specify_flux=False,sourcefile="sourcefile.txt",e_bin_num=ebin_num,e_bin_max=ebin_max,e_bin_min=ebin_min,e_bin_log=ebin_log)
+
+    source.write_db_input([sgroup])
+    print("Running defineback...")
+    subprocess.run(d2_dir+"defineback db.in",shell=True)
+
+    subprocess.run(d2_dir+"tallysetup")
+
+    print("Done.")
+
+def gen_problem_for_xgc(wall_material,ionmass):
+
+    eps = 1.0e-3
+    if np.abs(ionmass-1.0) < eps:
+        spec = "H"
+    elif np.abs(ionmass-2.0) < eps:
+        spec = "D"
+    else:
+        raise Exception("ionmass = %f. Currently can only handle H or D main ions."%ionmass)
+
+    testSps = ["0",spec,spec+"2",spec+"2+"]
+    backSps = ["e",spec+"+"]
+    reactions = ["hionize5",spec.lower()+"chex_const","h2dis","h2ion","h2dision","h2pdision","h2pdis","h2pdisrec"]
+    if wall_material == "mirror":
+        testSps = ["0",spec]
+        reactions = ["hionize5",spec.lower()+"chex_const"]
+        pmis = ["hmirror"]
+    elif wall_material == "C":
+        pmis = ["hdesorbc","h2desorbc",spec.lower()+"reflc"]
+    elif wall_material == "mo":
+        pmis = ["hdesorbmo","h2desorbmo",spec.lower()+"reflmo"]
+    elif wall_material == "Li":
+        if spec == "D":
+            pmis = ["hdesorbLi","D_refl_vftrim_Li"]
+        elif spec == "H":
+            pmis = ["hdesorbLi","H_refl_svftrim_Li"]
+    else:
+        raise Exception("wall_material = %s. Currently can only handle mirror, C, or mo"%wall_material)
+
+    problem.generateProblemInput(testSps,backSps,reactions,[wall_material],pmis)
+    subprocess.run("problemsetup",shell=True)
+
+    return spec
+    
+def get_tri_mesh(basename):
+    f = open(basename+".node","r")
+    line = f.readline().split()
+    Nnode = int(line[0])
+    rz = np.zeros([Nnode,2])
+    nodeidx = np.zeros([Nnode],dtype=int)
+    wallflag = np.zeros([Nnode],dtype=int)
+    for i in range(0,Nnode):
+        line = f.readline().split()
+        nodeidx[i] = int(line[0])
+        rz[i,0] = float(line[1])
+        rz[i,1] = float(line[2])
+        wallflag[i] = int(line[3])
+    f.close()
+
+    wallnodes = np.argwhere(wallflag > 0)
+    shift = np.min(nodeidx)
+
+    f = open(basename+".ele","r")
+    line = f.readline().split()
+    Ntri = int(line[0])
+    conn = np.zeros([Ntri,3],dtype=int)
+    for i in range(0,Ntri):
+        line = f.readline().split()
+        conn[i,0] = int(line[1])
+        conn[i,1] = int(line[2])
+        conn[i,2] = int(line[3])
+    f.close()
+
+    conn = conn - shift
+
+    return rz, conn, wallnodes
+
+
 
 def get_bp_mesh(filename="xgc.mesh.bp",oldfile=False):
     meshfile = adios2.Stream(filename,"rra")
@@ -40,29 +184,12 @@ def isclockwise(tri):
     else:
         return False
 
-def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
-    polygonfilename="none",trifile_base=None,make_plot=True):
-    """ Method to write the dg2d.in input file from,
-            (1) an XGC mesh or 
-            (2) from .ele and .node files from the Triangle code.
-
-        When using Triangle files, the .node file must have the 'boundary marker' field enabled.
-        and no attributes. i.e. the header should read: 'Nnode  2  0  1'
-
-    :kwarg material: (str, optional)
-    :kwarg recyc: (float, optional)
-    :kwarg walltemp: (float, optional)
-    :kwarg use_xgc_mesh: (bool, optional)
-    :kwarg polygonfilename: (str, optional)
-    :kwarg trifile_base: (str/None, optional) if not None, the code will look for .node and .ele files.
-    """
+def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,polygonfilename="none",trifile_base=None):
 
     if trifile_base==None:
-        # Get XGC mesh,
         coords,connections,wallnode_ids = get_bp_mesh()
         triang = mtri.Triangulation(coords[:,0],coords[:,1],connections)
     else:
-        # Get Triangle files,
         nodefile=trifile_base+".node"
         f=open(nodefile,"r")
         Nnode = int(f.readline().split()[0])
@@ -78,7 +205,6 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
                 wallnode_ids.append(i)
                 rwall.append(coords[i,0])
                 zwall.append(coords[i,1])
-        # close the wall,
         rwall.append(rwall[0])
         zwall.append(zwall[0])
         rwall = np.array(rwall)
@@ -94,14 +220,12 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
             connections[i,1] = int(line[2])-1
             connections[i,2] = int(line[3])-1
         f.close()       
-    # Generate matplotlib.mtri.Triangulation object, 
-    triang = mtri.Triangulation(coords[:,0],coords[:,1],connections)
-    if make_plot:
-        plt.figure()
-        plt.triplot(triang)
-        plt.plot(rwall,zwall)
-        plt.savefig("mesh.png")
-        plt.close()
+        triang = mtri.Triangulation(coords[:,0],coords[:,1],connections)
+
+        #plt.triplot(triang)
+        #plt.plot(rwall,zwall)
+        #plt.savefig("mesh.png")
+        #plt.close()
 
     Nnode = len(coords[:,0])
     Ntri = len(connections[:,0])
@@ -121,7 +245,6 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
 
     ####################################################
     # Write wallfile
-    # All nodes in the mesh are written to the wallfile.txt,
     wallfile = open("wallfile.txt","w")
     wallfile.write("# Wallfile automatically generated by script\n")
     wallfile.write("1\n")
@@ -134,9 +257,6 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
         wallfile.write("%f %f\n"%(x,z))
     wallfile.close()
 
-    ####################################################
-    # Write dg2d.in
-    # the bounding box is calculated to populate the dg2d.in header,
     Rmin = np.min(coords[:,0])
     Rmax = np.max(coords[:,0])
     Zmin = np.min(coords[:,1])
@@ -150,8 +270,6 @@ def write_geometry_files(material="C",recyc=0.99,walltemp=300,use_xgc_mesh=True,
     dg2dfile = open("dg2d.in","w")
     dg2d.write_dg2d_header(dg2dfile,"cylindrical",Rmin_tot,Rmax_tot,Zmin_tot,Zmax_tot,wallfile_name="wallfile.txt")
 
-    # Polygons are generated and written to the dg2d.in file.
-    # this makes use of the .write_plasma_polygon_dg2d() method of the 'Polygon' class.
     polys = []
     wall_triangles = []
     for itri in range(0,Ntri):
@@ -240,7 +358,7 @@ def write_background_files(dt,tstep,tstep_neut,wallnodes_ordered,wall_triangles,
 
     # Get plasma node data
     if xgc1:
-        f=adios2.Stream("xgc.f3d.%05d.bp"%tstep,"rra")
+        f=adios2.open("xgc.f3d.%05d.bp"%tstep,"r")
         ne=np.average(f.read("e_den"),axis=1)
         Te_para=np.average(f.read("e_T_para"),axis=1)
         Te_perp=np.average(f.read("e_T_perp"),axis=1)
@@ -384,7 +502,7 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
 
     # Get plasma node data
     if xgc1:
-        f=adios2.Stream("xgc.f3d.%05d.bp"%tstep,"rra")
+        f=adios2.open("xgc.f3d.%05d.bp"%tstep,"r")
         ne=np.average(f.read("e_den"),axis=1)
         Te_para=np.average(f.read("e_T_para"),axis=1)
         Te_perp=np.average(f.read("e_T_perp"),axis=1)
@@ -392,8 +510,8 @@ def write_background_files_for_own_mesh(dt,tstep,tstep_neut,wallnodes_ordered,wa
         Ti_perp=np.average(f.read("i_T_perp"),axis=1)
         ui_para=np.average(f.read("i_u_para"),axis=1)
         f.close()
-        f=adios2.Stream("xgc.bfield.bp","rra")
-        Bfield = f.read("bfield")
+        f=adios2.open("xgc.bfield.bp","r")
+        Bfield = f.read("/node_data[0]/values")
         f.close()
     else:
         f=adios2.Stream("xgc.f2d.%05d.bp"%tstep,"rra")
@@ -749,6 +867,23 @@ def write_dummy_bg_files_aux(nzone,nwall_input,stratum_start):
         f.write("%e "%(1e20))
         if ((i+1)%nperline == 0) and i != nwallsegs-1:
             f.write("\n")
+
+def get_xgc_energy_change():
+    # To define:
+    bk_nc = nc.Dataset("background.nc","r")
+    ne_zone = np.array(bk_nc["background_n"][:,0])
+    Te_zone_ev = np.array(bk_nc["background_temp"][:,0])/1.602e-19
+    Nzone = len(ne_zone)
+
+    nn = postprocess.get_output("neutral density")[0:Nzone,1]
+
+    E_iz = 30.0*1.602e-19
+
+    xgc_izrate = 0.8e-8*ne_zone*np.sqrt(Te_zone_ev)*(np.exp(-np.minimum(13.56/Te_zone_ev, 1.0e6))/(1.0 + 0.01*Te_zone_ev))*1.0e-6
+
+    return xgc_izrate*E_iz*nn
+
+
 
 
 

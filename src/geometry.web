@@ -262,6 +262,14 @@ In order to avoid evaluating |f|  twice, |surface_val|  should be passed as
 
       in_surface = abs(f0) <= geom_epsilon*vc_abs(grad)
 
+@#ifdef ONE_SIDED_CONE
+      if (coeff[cone_dir] != 0) then
+         if ((coeff[cone_dir] == 1) .neqv. (x[3] > coeff[cz]/2.0)) then
+            in_surface = .false.
+         end if
+      end if
+@#endif
+
       return
       end
 
@@ -316,7 +324,20 @@ if it lies on the negative side within |geom_epsion| it is accepted.
 
       f=surface_eval_a(surface_args,x)
       
-      if (f >= zero) return
+      if (f >= zero) then
+         return
+@#ifdef ONE_SIDED_CONE
+      else // this case checks for one sided cones
+         // if the cone is one sided, the cone_dir will be +1 or -1
+         if (coeff[cone_dir] != 0) then
+            // check if the point is in the correct side of the cone, if not, then it is on the positive side of the surface
+            // even though it is inside the ghost cone, it is still outside the surface
+            if ((coeff[cone_dir] == 1) .neqv. (x[3] > coeff[cz]/2.0)) then
+               return
+            end if
+         end if
+@#endif
+      end if
       
       inside_surface=in_surface(surface_args,x,.true.,f)
       
@@ -372,6 +393,13 @@ it is accepted. A strict check is done on the cut surfaces though.
       dofaces(n)                // Do the sloppy check on faces.
          f0 = surface_eval_a(cell_surface_info_a(n),x)
          if ( f0 < zero ) then
+@#ifdef ONE_SIDED_CONE
+            if (surface_coeffs[cone_dir, abs(surf_list[n])] != 0) then
+               if ((surface_coeffs[cone_dir, abs(surf_list[n])] == 1) .neqv. (x[3] > surface_coeffs[cz, abs(surf_list[n])]/2.0)) then
+                  cycle // even though it is inside the ghost cone, it is still outside the surface
+               end if
+            end if
+@#endif
             if ( ! in_surface(cell_surface_info(n),x,.true.,f0) ) return
          end if
       end do
@@ -429,8 +457,16 @@ $$ \sigma_k f_k(\vect x) \ge 0 $$ is done on all the other surfaces.
 
       dosurfaces(n)
          if ( surf_list[n] != face ) then
-            if ( surface_eval_a(cell_surface_info_a(n),x) < zero )
-     $           return
+            if ( surface_eval_a(cell_surface_info_a(n),x) < zero ) then
+@#ifdef ONE_SIDED_CONE
+               if (surface_coeffs[cone_dir, abs(surf_list[n])] != 0) then
+                  if ((surface_coeffs[cone_dir, abs(surf_list[n])] == 1) .neqv. (x[3] > surface_coeffs[cz, abs(surf_list[n])]/2.0)) then
+                     cycle // even though it is inside the ghost cone, it is still outside the surface
+                  end if
+               end if
+@#endif
+               return
+            end if
          end if
       end do
 
@@ -630,6 +666,11 @@ intersect the first face in its direction.
       h=half*vc_product(temp,v)
       c=surface_eval_a(surface_args,x0)
 
+// the following check is not needed for one sided cones
+// because even if the point is inside the ghost cone, we still consider it outside
+@#ifdef ONE_SIDED_CONE
+if ((coeff[cone_dir] == 0) || (coeff[cone_dir] == 1 .eqv. (x0[3] > coeff[cz]/2.0))) then
+@#endif
 @#if DEBUG
       if ( c < zero ) then
 @#if 0
@@ -646,6 +687,9 @@ intersect the first face in its direction.
          end if
 @#endif
       end if
+@#endif
+@#ifdef ONE_SIDED_CONE
+end if
 @#endif
 
       surface_intersect = geom_infinity
@@ -667,6 +711,17 @@ intersect the first face in its direction.
       else if ( h != zero ) then // Linear equation
          if ( h < zero ) surface_intersect = -c/(two*h)
       end if                    // else the equation is a constant
+
+@#ifdef ONE_SIDED_CONE
+      if (surface_intersect < geom_infinity) then // got a potential intersection
+         if (coeff[cone_dir] != 0) then // one sided cone
+            vc_xvt(x0,v,surface_intersect,temp) // temp is the point of intersection
+            if ((coeff[cone_dir] == 1) .neqv. (temp[3] > coeff[cz]/2.0)) then // if the point of int. is on the wrong side of the cone
+               surface_intersect = geom_infinity
+            end if
+         end if
+      end if
+@#endif
 
 @#if DEBUG
       if ( surface_intersect < zero ) then

@@ -3,6 +3,9 @@ data/species.nc
 data/materials.nc
 data/reactions.nc
 data/pmi.nc
+build*/
+.idea/
+__pycache__/
 MACOSX
 tex
 src/makedepend

@@ -719,7 +719,7 @@ def write_cylindrical_polygon_input(rgrid,ne,Te,TiTe_ratio,S0,R_tot,NR,Nflights,
     generate_db_input_nosourcefile(S0,Nflights,[2*NR],dbfilename="db.in",walltemp=walltemp,source_sp=source_sp)
 
 
-def write_cylinder_db_input(rgrid,ne,Te,Ti,S0,Nflights,source_stratum,walltemp=300.0,source_sp="H2",plasmafilename="plasmafile.txt",sourcefilename="sourcefile.txt"):
+def write_cylinder_db_input(rgrid,ne,Te,Ti,S0,Nflights,source_stratum,walltemp=300.0,source_sp="H2",plasmafilename="plasmafile.txt",sourcefilename="sourcefile.txt",t0=-1.0,tf=-1.0,init=False):
 
     NR=len(rgrid)
 
@@ -733,7 +733,7 @@ def write_cylinder_db_input(rgrid,ne,Te,Ti,S0,Nflights,source_stratum,walltemp=3
 
     sourcegroup = source.Source(Nflights,"puff",source_sp,pufftemp=walltemp,strength=S0,stratum=source_stratum,segment=0)
     
-    source.write_db_input([sourcegroup])
+    source.write_db_input([sourcegroup],t0=t0,tf=tf,init=init)
 
 
 def generate_db_input_nosourcefile(source_strength,Nflights,strata,dbfilename="db.in",walltemp=300.0,source_sp="H2",plasmafilename="plasmafile.txt"):

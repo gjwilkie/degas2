@@ -7,7 +7,6 @@ import geomutils
 import scipy.interpolate as interpolate
 import netCDF4 as nc
 import matplotlib.tri as mtri
-import collections
 import subprocess
 #from tqdm import tqdm
 
@@ -317,7 +316,7 @@ class DG2D:
         wallfile.write("%d\n"%(Nnode))
         wallfile.write("#\n")
         for i in range(0,Nnode):
-            wallfile.write("%f   %f \n"%(self.vertex_list[i].coords[0],self.vertex_list[i].coords[1]))
+            wallfile.write("%26.20f   %26.20f \n"%(self.vertex_list[i].coords[0],self.vertex_list[i].coords[1]))
         wallfile.close()
 
 

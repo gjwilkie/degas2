@@ -159,6 +159,19 @@ ion source rate
     T	      T          T       T      T       C       N    N     P     N  N     N     
 ----1---------2----------3-------4------5-------6-------7----8-----9-----10-11----12---
 
+total ion source rate
+  DEPENDENT VARIABLE
+	mass_change
+  INDEPENDENT VARIABLES
+	problem_sp
+  CONVERSIONS
+	scale_problem_sp_mass
+  ESTIMATORS
+# ionize  ionize_sup. chargex elastic dissoc test_ion plate puff recomb. vs snap. e_bins
+    T	      T          T       T      T       C       N    N     P     N  C     N     
+----1---------2----------3-------4------5-------6-------7----8-----9-----10-11----12---
+
+
 total ion source rate by reaction
   DEPENDENT VARIABLE
 	mass_change

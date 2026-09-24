@@ -4,7 +4,8 @@ class Source:
     """ Class managing DEGAS2 sources.
     """
     def __init__(self,nflights,stype,species,rootspecies=None,specify_flux=True,sourcefile="sourcefile.txt",
-                 sourcefile_fmt="row",pufftemp=None,puffexp=None,strength=None,stratum=None,segment=None,):
+                 sourcefile_fmt="row",pufftemp=None,puffexp=None,strength=None,stratum=None,segment=None,
+                 e_bin_num=10,e_bin_min=0.1,e_bin_max=1000.0,e_bin_log=True):
         """ Initialization of DEGAS Source class.
             Args:
                 nflights: (int) Number of flights
@@ -72,6 +73,16 @@ class Source:
             self.check_segments(sourcefile=sourcefile)
         else:
             self.sourcefile = sourcefile
+
+        if stype=="plt_e_bins":
+            self.type = "plt_e_bins"
+            self.e_bin_num = e_bin_num
+            self.e_bin_min = e_bin_min
+            self.e_bin_max = e_bin_max
+            if e_bin_log:
+                self.e_bin_spacing = "log"
+            else:
+                self.e_bin_spacing = "linear"
             
     def set_source_from_segments(self, strength, stratum, segment):
         """ Method to set Source attrs given: strength, stratum, segment.
@@ -214,7 +225,7 @@ def write_sourcefile_from_segments(strength=[1e24], stratum=[3], segment=[1], fi
         f.write(f"{int(strat)} {int(seg)} {S}\n")
     f.close()
     
-def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
+def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in",init=False,t0=-1.0,tf=-1.0):
     """ Function to write the 'db.in' input file for the defineback program.
     String formatting is important here because these values will be read by FORTRAN
     Args:
@@ -229,10 +240,14 @@ def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
         This common variable "LINELEN" appears to be set to 300 in 'macros.hweb'.
     """
     Nsource=len(source_groups)
-    f = open(filename,"w") 
+    f = open(filename,"w")
+    if tf > 0:
+        if init:
+            f.write("time_initialization\n")
+        f.write("time_interval %8.3e %8.3e\n"%(t0,tf)) 
     f.write(f"plasma_file {plasmafile}\n")
     # For each source group, 
-    for i in range(0,Nsource):
+    for i in range(0, Nsource):
         source = source_groups[i]
         f.write("new_source_group\n")
         f.write(f"  source_type {source.type}\n")
@@ -240,18 +255,27 @@ def write_db_input(source_groups,plasmafile="plasmafile.txt",filename="db.in"):
         f.write(f"  source_species {source.species}\n")
         f.write(f"  source_root_sp {source.rootspecies}\n")
         f.write(f"  {source.specify_units}\n")
+        # if sourcefile exists, stratum/segment/strength info is included there,
         if source.sourcefile is not None:
             f.write(f"  source_file {source.sourcefile} {source.sourcefile_fmt}\n")
         else:
-            f.write(f"  source_stratum {source.stratum}\n")
-            f.write(f"  source_segment {source.segment}\n")
-            f.write(f"  source_strength {source.strength}\n")
+            f.write("  source_stratum "+str(source.stratum)+"\n")
+            f.write("  source_segment "+str(source.segment)+"\n")
+            f.write("  source_strength "+str(source.strength)+"\n")
+
         if source.type == "puff":
-            if source.pufftemp:
-                f.write(f"  source_puff_temp {source.pufftemp}\n")
-            if source.puffexp:
-                f.write(f"  source_puff_exponent {source.puffexp}\n")
-        f.write(f"  source_nflights {int(source.nflights)}\n")
+            if source_groups[i].pufftemp != None:
+                f.write("  source_puff_temp "+str(source.pufftemp)+"\n")
+            if source_groups[i].puffexp != None:
+                f.write("  source_puff_exponent "+str(source.puffexp)+"\n")
+        
+        if source_groups[i].type == "plt_e_bins":
+            f.write("  source_e_bin_min "+str(source.e_bin_min)+"\n")
+            f.write("  source_e_bin_max "+str(source.e_bin_max)+"\n")
+            f.write("  source_e_bin_num "+str(source.e_bin_num)+"\n")
+            f.write("  source_e_bin_spacing "+source.e_bin_spacing+"\n")
+
+        f.write("  source_nflights "+str(source.nflights)+"\n")
         f.write("end_source_group\n")
     f.close()
 

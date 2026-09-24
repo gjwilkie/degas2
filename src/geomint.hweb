@@ -63,7 +63,11 @@ $$ f_k(x,y,x) = c_0+c_{x} x+c_{y} y+c_{z} z+c_{xx} x^2+c_{yy} y^2+c_{zz} z^2
    +c_{xy} x y+c_{yz} y z+c_{xz} x z =0$$
 where the $c$'s are coefficients given by |coeff|.
 
+@#ifdef ONE_SIDED_CONE
+@m NCOEFFS 11
+@#else
 @m NCOEFFS 10
+@#endif
 @m c0 1
 @m cx 2
 @m cy 3
@@ -74,6 +78,10 @@ where the $c$'s are coefficients given by |coeff|.
 @m cxy 8
 @m cyz 9
 @m cxz 10
+
+@#ifdef ONE_SIDED_CONE
+@m cone_dir 11
+@#endif
 
 @ Indices into |cells| and |surface|.
 

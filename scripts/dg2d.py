@@ -45,6 +45,7 @@ class DG2D:
         """
         Constructor for DG2D object. Generates for minimal defaults.
         """
+        self.N_walls = 0
         self.polys = []
         self.wallpoly = None
         self.outerpoly = None
@@ -79,79 +80,157 @@ class DG2D:
             wallidx: (optional) integer index of the wall segment to apply properties to. If not provided, will apply the provided properties around entire wall.
         """
         # Apply to all segments as a default
-        if wallidx == None:
+        if wallidx is None:
             self.walltemps= np.array([walltemp]*len(self.wallpoly.vertices))
             self.Rcoeffs= np.array([Rcoeff]*len(self.wallpoly.vertices))
-            self.materials= [material]*len(self.wallpoly.vertices)
-            self.exits= [exitzone]*len(self.wallpoly.vertices)
+            self.materials= np.array([material]*len(self.wallpoly.vertices))
+            self.exits= np.array([exitzone]*len(self.wallpoly.vertices))
         else:
             self.walltemps[wallidx]= walltemp
             self.Rcoeffs[wallidx]= Rcoeff
             self.materials[wallidx]= material
             self.exits[wallidx]= exitzone
 
-    def define_mesh(self,coords,conn,wallnodes=[-1],trust_wallnodes=True,wallpolys=[-1],progress=False):
+    def define_mesh(self, coords, conn, boundary_nodes=None, Rb=None, Zb=None, progress=False, verbose=True, boundary_as_wall=True):
         """
         Imports a set of coordinates and connectivity to generate a mesh for definegeometry2d.
 
         Args:
-            coords: float array of size (Nnode, 2), where the first and second columns are the R and Z coordinates of the nodes, respectively.
-            conn: integer array of size (Npoly, Nseg), where each row are the node indices (in coords) that connect to form a polygon (usually a triangle). Must densely cover a domain.
-            wallnodes: (optional) integer array that specifies which indices of the nodes (in coords) form the boundary. Optional for triangular meshes; mandatory for higher-order polygons.
+            coords: float array of size (Nnode, 2) with R and Z coordinates.
+            conn: integer array of size (Npoly, Nseg) describing polygon connectivity.
+            boundary_nodes: (optional) integer list/array of indices in coords known to be on the boundary.
+            Rb, Zb: (optional) explicitly ordered arrays of boundary coordinates.
         """
-        self.polys=[]
-        Nnode = len(coords[:,0])
-        Nseg = len(conn[0,:])
-        Npoly = len(conn[:,0])
-
-        for i in range(0,Nnode):
-            self.vertex_list.append(Vertex(i,coords[i,0],coords[i,1])) 
+        import numpy as np
         
-        iterator = range(0,Npoly)
+        self.polys = []
+        Nnode = len(coords[:, 0])
+        Nseg = len(conn[0, :])
+        Npoly = len(conn[:, 0])
+
+        # 1. Initialize all vertices as interior nodes (wall_id=1) in the order they appear,
+        for i in range(Nnode):
+            self.vertex_list.append(Vertex(i, coords[i, 0], coords[i, 1], wall_id=1)) 
+        self.vertex_arr = coords
+        self.N_walls += 1
+        if verbose:
+            print(f"* Created {Nnode} vertices for {Npoly} polygons")
+        
+        iterator = range(Npoly)
         if progress:
-            iterator = tqdm(iterator)
-        for i in iterator:
-            poly = Polygon()
-            for j in range(0,Nseg):
-                if conn[i,j] >= 0:
-                    poly.add_vertex(self.vertex_list[conn[i,j]])
-            self.polys.append(poly)
-
-        print("Done defining mesh. Now finding wall nodes...")
-
-        self.wallpoly = Polygon(increment=False)
-        startidx = get_first_idx(self.vertex_list) 
-        if (wallnodes[0] == -1 or not trust_wallnodes):
-            if (Nseg > 3):
-                print("ERROR: for quadrilateral or higher basic polygons in call to define_mesh, wallnodes must be specified")
+            try:
+                from tqdm import tqdm
+                iterator = tqdm(iterator)
+            except ImportError:
+                pass
                 
-            wallnodes_out=[]
-            wallnodes_out.append(self.vertex_list[startidx])
-            self.wallpoly.add_vertex(wallnodes_out[-1])
+        # 2. Build standard polygons
+        for i in iterator:
+            poly = Polygon() # split=False, will triangulate to one zone
+            for j in range(Nseg):
+                if conn[i, j] >= 0:
+                    poly.add_vertex(self.vertex_list[conn[i, j]])
+            self.polys.append(poly)
+        if verbose:
+            print(f"* Added {Npoly} polygons to mesh, now finding wall nodes...")
+        self.wallpoly = Polygon(increment=False)
+
+        # 3. Handle Wall Nodes based on provided data
+        if (Rb is not None) and (Zb is not None):
+            if len(Rb) != len(Zb):
+                raise ValueError(f"Length of Rb must match Zb!")
+            if verbose:
+                print(f"\t- will construct wallpoly from {len(Rb)} ordered boundary (Rb, Zb).")
+
+            # If boundary_nodes is provided, search space is limited to just boundary nodes, else it's all nodes (slow)
+            search_indices = np.array(boundary_nodes) if boundary_nodes is not None else np.arange(Nnode)
+            search_coords = coords[search_indices]
+            
+            for i, (r, z) in enumerate(zip(Rb, Zb)):
+                # Vectorized distance calculation to map (R, Z) strictly to a mesh node
+                dists = (search_coords[:, 0] - r)**2 + (search_coords[:, 1] - z)**2
+                local_idx = np.argmin(dists) # index into search_coords
+                actual_idx = search_indices[local_idx] # index into larger nodes arr.
+                
+                # Update attributes of this Vertex instance and add to wallpoly in prescribed order
+                vert = self.vertex_list[actual_idx]
+                if boundary_as_wall:
+                    # Optional? move to another 'wall'
+                    vert.wall_id = 2
+                    vert.id = i
+                self.wallpoly.add_vertex(vert)
+                
+            self.wallpoly.is_clockwise(force=True)
+            if verbose:
+                print(f"\t- done, added {len(self.wallpoly.vertices)} verts to wallpoly.")
+
+        else:
+            if verbose:
+                print("\t- (Rb, Zb) not provided, running search algorithm...")
+            startidx = get_first_idx(self.vertex_list) 
+            
+            if (Nseg > 3) and (boundary_nodes is None):
+                print("ERROR: for quadrilateral or higher basic polygons, boundary_nodes must be specified")
+                
+            wallnodes_out = [self.vertex_list[startidx]]
+            # Optional? move to another 'wall'
+            if boundary_as_wall:
+                wallnodes_out[0].wall_id = 2
+                wallnodes_out[0].id = 0
+            self.wallpoly.add_vertex(wallnodes_out[0])
+            
             closed = False
-            prevnode=wallnodes_out[-1]
+            prevnode = wallnodes_out[0]
             first = True
+            i = 1
+            
+            # Pre-filter lists to bypass heavy iterations inside find_next_wall_node
+            if boundary_nodes is not None:
+                valid_wall_vertices = [self.vertex_list[i] for i in boundary_nodes]
+                valid_wall_polys = [p for p in self.polys if any(v in valid_wall_vertices for v in p.vertices)]
+            else:
+                valid_wall_vertices = self.vertex_list
+                valid_wall_polys = self.polys
+
             while not closed:
                 if progress:
                     print(len(wallnodes_out))
-                if wallpolys == [-1]:
-                    next_node = find_next_wall_node(wallnodes_out[-1],prevnode,self.vertex_list,self.polys,first,check_clockwise=True)
-                else:
-                    next_node = find_next_wall_node(wallnodes_out[-1],prevnode,wallnodes,wallpolys,first,check_clockwise=True)
+                    
+                next_node = find_next_wall_node(
+                    wallnodes_out[-1], 
+                    prevnode, 
+                    valid_wall_vertices, 
+                    valid_wall_polys, 
+                    first, 
+                    check_clockwise=True
+                )
                 first = False
+                
                 if next_node == wallnodes_out[0]:
                     closed = True
                 else:
                     prevnode = wallnodes_out[-1]
+                    if boundary_as_wall:
+                        next_node.wall_id = 2
+                        next_node.id = i
+                        i += 1
                     wallnodes_out.append(next_node)
-                    self.wallpoly.add_vertex(wallnodes_out[-1])
+                    self.wallpoly.add_vertex(next_node)
+                    
             self.wallpoly.is_clockwise(force=True)
-        else:
-            Nwall = len(wallnodes)
-            for i in range(0,Nwall):
-                self.wallpoly.add_vertex(self.vertex_list[wallnodes[np.mod(startidx+i,Nwall)]])
+        # increment walls if we're treating the boundary as another wall for the wallfile.
+        if boundary_as_wall:
+            self.N_walls += 1
+            # Re-index all interior vertices to remove gaps for verts that were moved to wall_id=2
+            interior_id_counter = 0
+            for vert in self.vertex_list:
+                if getattr(vert, 'wall_id', 1) == 1:
+                    vert.id = interior_id_counter
+                    interior_id_counter += 1
+            if verbose:
+                print(f"\t- Re-indexed {interior_id_counter} interior vertices.")
 
-    def define_limiter(self,Rlim_in,Zlim_in,maxdist=-1):
+    def define_limiter(self,Rlim_in,Zlim_in,maxdist=-1,wall_id=1):
         """
         Defines the boundary of a domain to be triangulated by definegeometry2d.
 
@@ -159,39 +238,56 @@ class DG2D:
             Rlim: array of floats specifying R coordinates of boundary nodes.
             Zlim: array of floats specifying Z coordinates of boundary nodes.
         """
-
         limpoly = Polygon()
         if len(Rlim_in) != len(Zlim_in):
             print("ERROR: Rlim and Zlim must have the same dimensions in call to define_limiter")
+            return
         Nlim = len(Rlim_in)
 
-        mindist = 999999
-        minidx = -1
-        for i in range(0,len(Rlim_in)):
-            dist = np.linalg.norm([Rlim_in[i],Zlim_in[i]])
-            if dist < mindist:
-                minidx = i
-        
-        Rlim = Rlim_in[np.mod( np.array(range(minidx,minidx+Nlim),dtype=int),Nlim)]
-        Zlim = Zlim_in[np.mod( np.array(range(minidx,minidx+Nlim),dtype=int),Nlim)]
-        if maxdist > 0:
-            Rlim, Zlim = refine_limiter(Rlim,Zlim,maxdist)
+        # 1. Vectorized distance calculation to find the closest index to (0,0)
+        minidx = np.hypot(Rlim_in, Zlim_in).argmin()
 
+        # 2. Roll the arrays natively so minidx becomes index 0
+        Rlim = np.roll(Rlim_in, -minidx)
+        Zlim = np.roll(Zlim_in, -minidx)
+
+        # 3. Refine boundary if needed
+        if maxdist > 0:
+            Rlim, Zlim = refine_limiter(Rlim, Zlim, maxdist)
+
+        # 4. Add all limiter points to 'vertex_list' and limiter Polygon object.
+        # NOTE: pass wall_id=1 --> this must be the first 'wall' in the wallfile.
         for i in range(0,Nlim):
-            self.vertex_list.append(Vertex(i,Rlim[i],Zlim[i]))
+            self.vertex_list.append(Vertex(i,Rlim[i],Zlim[i],wall_id=wall_id))
             limpoly.add_vertex(self.vertex_list[-1])
+        # set other attrs of the polygon:
         limpoly.is_clockwise(force=True)
-        limpoly.split = True
+        limpoly.split = True # controls 'triangulate_to_zones' behavior.
         self.wallpoly= limpoly
         self.polys.append(limpoly)
+        # also add vertex array for vectorized operations later.
+        self.vertex_arr = np.vstack([Rlim, Zlim]).T # (N, 2) array
+        # increment the number of walls,
+        self.N_walls += 1
 
-    def write_files(self,aux_thickness=0.005):
+    def write_files(self, make_aux_polys=True, aux_thickness=0.005, new_wall_from_aux=True, verbose=True):
         """
-        Writes definegeometry2d input files from data in DG2D object.
-        All data must be specified except for auxilliary polygons.
+        Writes definegeometry2d input files (dg2d.in, wallfile.txt) from data in DG2D object.
+        All data must be already specified as DG2D class attrs except for auxilliary polygons
+            which are optionally generated here.
+        
+        Kwargs:
+            make_aux_polys: (bool) if True, runs: self.wallpoly.pad_with_aux_polys() to generate many auxiliary polygons
+                connecting verts from the existing self.wallpoly to a new 'outerpoly', each aux poly becomes a new solid/exit zone.
+                This allows greated flexibility in defining targets/wall conditions.
+            aux_thickness: (float) kwarg passed to Polygon.pad_with_aux_polys() for padding algorithm.
+            new_wall_from_aux: (bool) if True: the new 'outerpoly' is written into the wallfile as a new wall, this can make the 
+                final dg2d.in and wallfile.txt more legible.             
         """
 
         def write_internal_polygon(poly,newzone=True):
+            """ Local helper func to create plasma/vacuum (internal) zones from polygons.
+            """
             f = open(self.infile_name,"a")
     
             if newzone:
@@ -206,10 +302,10 @@ class DG2D:
             f.write("  stratum "+str(self.current_stratum)+"\n")
             if poly.is_clockwise():
                 for vertex in poly.vertices:
-                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+                    f.write(f"  wall {vertex.wall_id} {vertex.id} {vertex.id}\n")
             else:
                 for vertex in reversed(poly.vertices):
-                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+                    f.write(f"  wall {vertex.wall_id} {vertex.id} {vertex.id}\n")
     
             if poly.split:
                 f.write("  triangulate_to_zones\n")
@@ -219,6 +315,9 @@ class DG2D:
             f.close()
     
         def write_aux_polygon(poly,material=None,walltemp=300.0,Rcoeff=1.0,exitzone=False):
+            """ Local helper to write auxiliary (quadrilateral) polygons that connect the wallpoly to the new outerpoly
+            NOTE: each gets the 'triangulate_polygon' command instructing definegeometry2d to *not* create internal zones.
+            """
             f = open(self.infile_name,"a")
     
             if exitzone:
@@ -235,33 +334,21 @@ class DG2D:
                 f.write("  recyc_coef "+str(Rcoeff)+"\n")
             if poly.is_clockwise():
                 for vertex in poly.vertices:
-                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+                    f.write(f"  wall {vertex.wall_id} {vertex.id} {vertex.id}\n")
+                    #f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
             else:
                 for vertex in reversed(poly.vertices):
-                    f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
+                    f.write(f"  wall {vertex.wall_id} {vertex.id} {vertex.id}\n")
+                    #f.write("  wall 1 "+str(vertex.id)+" "+str(vertex.id)+"\n")
     
             f.write("  triangulate_polygon\n")
             f.write("\n")
             f.close()
 
+        # 1. Calculate bounds for universal cell,
+        Rmin, Rmax = np.amin(self.vertex_arr[:,0]), np.amax(self.vertex_arr[:,0]) 
+        Zmin, Zmax = np.amin(self.vertex_arr[:,1]), np.amax(self.vertex_arr[:,1]) 
 
-        # Calculate bounds
-        Nvertex = len(self.vertex_list)
-        Rmin = 9e30
-        Rmax = -9e30
-        Zmin = 9e30
-        Zmax = -9e30
-
-        for i in range(0,Nvertex):
-            if self.vertex_list[i].coords[0] < Rmin:
-                Rmin = self.vertex_list[i].coords[0]
-            if self.vertex_list[i].coords[0] > Rmax:
-                Rmax = self.vertex_list[i].coords[0]
-            if self.vertex_list[i].coords[1] < Zmin:
-                Zmin = self.vertex_list[i].coords[1]
-            if self.vertex_list[i].coords[1] > Zmax:
-                Zmax = self.vertex_list[i].coords[1]
-    
         dR = Rmax-Rmin
         dZ = Zmax-Zmin
         if self.symmetry == "cylindrical":
@@ -271,8 +358,9 @@ class DG2D:
             self.Rbounds = [Rmin-0.5*dR,Rmax+0.5*dR]
             self.Zbounds = [Zmin - 0.5*dZ, Zmax + 0.5*dZ]
 
-
-        # Write header
+        # 2. Write header/'prep' section,
+        if verbose:
+            print(f"* writing prep section of '{self.infile_name}'...")
         f = open(self.infile_name,"w")
         f.write("symmetry "+self.symmetry+"\n")
         f.write("bounds %f %f  %f %f\n"%(self.Rbounds[0],self.Rbounds[1],self.Zbounds[0],self.Zbounds[1]))
@@ -281,26 +369,43 @@ class DG2D:
         f.write("\n")
         f.close()
 
+        # 3. Start construction section - write plasma/vacuum zones
+        if verbose:
+            print(f"* writing construction section for {len(self.polys)} internal polygons...")
         for poly in self.polys:
             write_internal_polygon(poly)
         
-        if True:
-            aux_polys, outpoly, newvertices = self.wallpoly.build_aux_wall_polygons(self.vertex_list[-1].id+1,aux_thickness)
+        # 4. Continue construction section - build/write auxiliary solid/exit zone polygons (optional)
+        if make_aux_polys:
+            if verbose:
+                print("* padding 'wallpoly' to create aux. polygons...")
+            aux_polys, outpoly, newvertices = self.wallpoly.pad_with_aux_polys(
+                target_thickness=aux_thickness,
+                new_wall_from_aux=new_wall_from_aux,
+            )
+            if verbose:
+                print(f"\t- done, created {len(aux_polys)} aux-polys")
+            if new_wall_from_aux:
+                # increment the number of walls,
+                self.N_walls += 1
+            
             self.outerpoly = outpoly
-
             Nnew = len(newvertices)
-            for i in range(0,Nnew):
+            for i in range(Nnew):
                 self.vertex_list.append(newvertices[i])
 
-            for i in range(0,len(aux_polys)):
+            for i in range(len(aux_polys)):
                 write_aux_polygon(aux_polys[i],material=self.materials[i],walltemp=self.walltemps[i],Rcoeff=self.Rcoeffs[i],exitzone=self.exits[i])
         else:
             outpoly = self.wallpoly
             self.outerpoly = self.wallpoly
+            new_wall_from_aux_outer = False
 
+        # 5. Close outer poly in universal cell,
         f = open(self.infile_name,"a") 
-        Polygon.close_in_universal_cell(f,outpoly.vertices,0,self.current_stratum+1,self.materials[-1],self.Rcoeffs[-1],walltemp=self.walltemps[-1],clockwise=outpoly.is_clockwise())
+        Polygon.close_in_universal_cell(f,outpoly.vertices,self.current_stratum+1,self.materials[-1],self.Rcoeffs[-1],walltemp=self.walltemps[-1],clockwise=outpoly.is_clockwise())
 
+        # 6. End construction section,
         if self.write_polygonfile:
             f.write("polygon_nc_file "+self.polygonfile_name+"\n")
         else:
@@ -308,16 +413,65 @@ class DG2D:
         f.write("end\n")
         f.close()
 
+        # 7. Write wallfile,
+        # - Break vetex-list up by walls,
+        verts_by_wall = []
+        for i in range(self.N_walls):
+            verts_by_wall.append( [v for v in self.vertex_list if v.wall_id==i+1] )
+
         Nnode = len(self.vertex_list)
         wallfile = open(self.wallfile_name,"w")
-        wallfile.write("# Wallfile automatically generated by script\n")
-        wallfile.write("1 \n")
+        wallfile.write("# Wallfile automatically generated by dg2d.py:DG2D.write_files()\n")
+        wallfile.write(f"{self.N_walls} \n")
         wallfile.write("#\n")
-        wallfile.write("%d\n"%(Nnode))
+        wallfile.write(" ".join(str(len(l)) for l in verts_by_wall)+"\n")
         wallfile.write("#\n")
-        for i in range(0,Nnode):
-            wallfile.write("%26.20f   %26.20f \n"%(self.vertex_list[i].coords[0],self.vertex_list[i].coords[1]))
+        for vert_list in verts_by_wall:
+            for vert in vert_list:
+                wallfile.write("%26.20f   %26.20f \n"%(vert.coords[0],vert.coords[1]))
+            wallfile.write("#\n") # put a comment between walls for legibility.
         wallfile.close()
+
+    @classmethod
+    def load_from_triangle(cls, trifile_base):
+        """
+        Parses Triangle .node and .ele files.
+        Returns coordinates, connectivity, and wall node IDs.
+        """
+        # Parse .node file
+        nodefile = trifile_base + ".node"
+        with open(nodefile, "r") as f:
+            Nnode = int(f.readline().split()[0])
+            coords = np.zeros((Nnode, 2))
+            wallnode_ids = []
+            for i in range(Nnode):
+                line = f.readline().split()
+                coords[i, 0] = float(line[1])
+                coords[i, 1] = float(line[2])
+                if int(line[3]) == 1:
+                    wallnode_ids.append(i)
+
+        # Parse .ele file
+        elefile = trifile_base + ".ele"
+        with open(elefile, "r") as f:
+            Ntri = int(f.readline().split()[0])
+            conn = np.zeros((Ntri, 3), dtype=int)
+            for i in range(Ntri):
+                line = f.readline().split()
+                conn[i, 0] = int(line[1]) - 1
+                conn[i, 1] = int(line[2]) - 1
+                conn[i, 2] = int(line[3]) - 1
+
+        return coords, conn, wallnode_ids
+
+    @classmethod
+    def load_from_xgc(cls, bpfile):
+        """
+        Retrieves XGC mesh using the legacy get_bp_mesh function.
+        Returns coordinates, connectivity, and wall node IDs.
+        """
+        coords, conn, wallnode_ids = get_bp_mesh(bpfile)
+        return coords, conn, wallnode_ids
 
 
 
@@ -443,7 +597,6 @@ def get_triangulation_from_polygons(polyfile,geomfile="geometry.nc"):
             if (np.abs(coords[0] - vertices[i,0]) < eps) and (np.abs(coords[1] - vertices[i,1]) < eps):
                 idx = i
         return idx
-
 
     # Initially populate array of vertices
     allvertices=coords[0,0:3,0:2]
@@ -1127,13 +1280,15 @@ def write_dg2d_input_from_single_wall(wallfile_name,material,recyc,walltemp=300.
             Rcoords_sep.append(Rcoord)
             Zcoords_sep.append(Zcoord)
      
-    # Now we have read the wallfile. We know how many points are in each wall and the R/Z coordinates for each point defining these walls. We can close the wallfile now.
+    # Now we have read the wallfile. We know:
+    #   How many points are in each wall.
+    #   The R/Z coordinates for each point defining these walls.
     wallfile.close()
 
     polys=[]
 
     # There will be only three polygons:
-    # 1: the vacuum vessel interior
+    # 1: The vacuum vessel interior
     # 2: Small polygon representing exit on LFS, connects to right side of universal cell
     # 3: Most of the wall to the edge of the universal cell. Shares zone with #2. 
 
@@ -1263,11 +1418,12 @@ def generateGeometryFromEFITfile(efitfile,mat,recyc_coef=1.0,Twall=300.0,wfilena
                                  clockwise=False,RZlim_start=None,def_separatrix=False,
                                  dlim_max=0.05,dsep_max=0.05,minarea=-1.0):
     """
-    Writes dg2d.in from an EFIT g file using definegeometry2d's built-in triangulation.
+    Writes dg2d.in from an EFIT gEQDSK file and other params set through kwargs above.
 
     Args:
         efitfile: string filename for the EFIT g file.
         mat: string wall material name.
+    Kwargs:
         recyc_coeff: (optional) float for recycling coefficient.
         Twall: (optional) float for temperature of wall in Kelvin.
         wfilename: (optional) string for the name of the "wallfile". Included for compatibility with legacy scripts.

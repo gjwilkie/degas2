@@ -1,13 +1,17 @@
 # Created on Nov. 21, 2024 by Quinn Pratt
-# DEGAS2 setup based on the micerscript.py from A. Angulo and G. Wilkie
+# DEGAS2 setup inspired by 'micerscript.py' from A. Angulo and G. Wilkie
 # 
 # SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN directory. 
-#        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below.
+#        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below to be importable.
 #
 # The user should run the following commands (on the omega cluster at GA) before executing this scipt,
 # >> module purge
 # >> module load degas2
 # This will set up the necessary env. vars and modify the path/pythonpath.
+# 
+# This script is designed to run in a degas2 work-directory with some required files,
+# e.g. 'input_profiles.nc', 'geqdsk', 'tally.in', and 'degas2.in'
+# 
 # ----------------
 # Core python,
 import os
@@ -145,67 +149,55 @@ else:
 rxn_dict = problem.get_reactions_from_problem("degas2.in", "problem.nc")
 rxn_names = list(rxn_dict.keys())
 recomb_included = any(["recomb" in s for s in rxn_names])
+if recomb_included:
+    print(f"INFO (omfit_setup): Recombination reaction found in problem.nc - will check for recomb_n_flights param.")
 
 # ----------------
 # DEGAS2 definegeometry2d,
-# NOTE: defineback needs the psifunc interpolant to map the 1D profiles onto the
-#       psifunc is now defined above from the gEQDSK file.
+# NOTE: updated methods expect an auxiliary "limiterfile.txt" from OMFIT.
+#       I have not yet provided a fallback where this file is not provided...
 run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
 if run_definegeometry2d:
+    # 1. Unpack dg2d settings,
     dg2d_kwargs = setup_kwargs.get("definegeometry2d", {}) # dict of options for dg2d scripts.
-    # Whether or not we've been provided with a custom mesh, 
-    custom_tri = dg2d_kwargs.get("custom_tri", False)
-    # Recycling coefficient
-    recyc = dg2d_kwargs.get("recyc", 0.98)
-    # Wall Material
-    material = dg2d_kwargs.get("material","C")
-    # Wall temperature in Kelvin
-    walltemp = dg2d_kwargs.get("walltemp",300.0)
-    # When refining mesh, this is the largest segment permitted along the wall [m]
-    # max distance along limiter for triangulation. Roughly sets the spatial res.
-    dlim_max = dg2d_kwargs.get("dlim_max", 0.02)
-    minarea = dg2d_kwargs.get("minarea",-1)
-    # This is an optional point on/near the limiter to index as 0.
-    # This can assist with defining distributed sources using the "start:end" method.
-    # Set to None to disable.
-    # Set to (1.0128, 1.2053) [m] for the upper HFS edge.
-    RZlim_start = dg2d_kwargs.get("RZlim_start", None)
 
-    # From the degas2/scripts/dg2d.py
-    geo_kw = dict(recyc_coef=recyc, 
-                  Twall=walltemp,
-                  dlim_max=dlim_max,
-                  clockwise=True, # Not sure why this is True, default is False.
-                  RZlim_start=RZlim_start, # Upper HFS point on limiter.
-                  minarea=minarea,
-             )
+    # Whether or not we've been provided with a custom mesh in the form of Triangle .node/.ele files.
+    custom_tri = dg2d_kwargs.get("custom_tri", False)
+
+    # 2. Read limiter file,
+    limiterfile_basename = dg2d_kwargs.get("limiterfile_basename", "limiterfile")
+    limiterfile_fname = limiterfile_basename + ".txt"
+    check_for_file(limiterfile_fname, fail=True)
+    seg_inds, Rlim, Zlim, material, walltemp, recyc, exitzone = np.genfromtxt(limiterfile_fname,
+        delimiter=' ',dtype=object,encoding='utf-8').T
+    # format arrays...
+    seg_inds, exitzone = seg_inds.astype(int), exitzone.astype(int)
+    Rlim, Zlim = Rlim.astype(float), Zlim.astype(float)
+    material = material.astype("U8") # up to 8 chars.
+    walltemp, recyc = walltemp.astype(float), recyc.astype(float)
+
+    # 4. Call the *new* dg2d api workflow,
+    dg2d_obj = dg2d.DG2D()
+    dg2d_obj.polygonfile_name = "polygons.nc" # backward compatibility, now defaults to singular 'polygon.nc'
     if custom_tri:
         tri_basename = dg2d_kwargs.get("custom_tri_basename", "flux_surfaces")
         # check for necessary files,
         for ext in [".ele", ".node"]:
             check_for_file(tri_basename+ext, fail=True)
-        # generate the geometry files,
-        # this script will write, 
-        # 1. the dg2d.in file
-        # 2. the wallfile. 
-        from xgcpost import write_geometry_files
-        write_geometry_files(material=material,
-            recyc=recyc,
-            walltemp=walltemp,
-            use_xgc_mesh=True,
-            polygonfilename="polygons.nc",
-            trifile_base=tri_basename,
-            make_plot=False,
-        )
-        # NOTE: psifunc is still defined from above.
+        # extract nodes and connectivity,
+        coords, conn, wallnode_ids = dg2d_obj.load_from_triangle(tri_basename)
+        # define mesh instead of defining limiter (see below),
+        dg2d_obj.define_mesh(coords, conn, boundary_nodes=wallnode_ids, Rb=Rlim, Zb=Zlim)
     else:
-        # Use the new DG2D class to deal with cases direct from a gEQDSK file...
-        # dg2d.setup(material, recyc, gfile=geqdsk_file, walltemp=walltemp, run_dg2d=False)
-	    # OLD...
-        # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
-        # the psifunc is used later when we run defineback.
-        psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
-        # outputs = ['wallfile.txt','dg2d.in']
+        dg2d_obj.define_limiter(Rlim,Zlim)
+    dg2d_obj.set_wallprops() # preallocates wall properties as arrays.
+    dg2d_obj.set_wallprops(walltemp=walltemp, 
+        material=material, 
+        Rcoeff=recyc, 
+        exitzone=exitzone, 
+        wallidx=seg_inds) # sets all properties from seg_inds indexing.
+    dg2d_obj.write_files(aux_thickness=0.005) # <-- this will write 'dg2d.in', and 'wallfile.txt'
+
     # >>>>
     print("Running definegeometry2d...\n")
     subprocess.run(d2path+"/definegeometry2d dg2d.in",shell=True)
@@ -216,6 +208,78 @@ else:
     # I don't think we actually need the 'polygons.nc' file.
     print("Skipping definegeometry2d...\n")
     check_for_file("geometry.nc", fail=True)
+
+# if False:
+#     # ----------------
+#     # DEGAS2 definegeometry2d,
+#     # NOTE: defineback needs the psifunc interpolant to map the 1D profiles onto the
+#     #       psifunc is now defined above from the gEQDSK file.
+#     run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
+#     if run_definegeometry2d:
+#         dg2d_kwargs = setup_kwargs.get("definegeometry2d", {}) # dict of options for dg2d scripts.
+#         # Whether or not we've been provided with a custom mesh, 
+#         custom_tri = dg2d_kwargs.get("custom_tri", False)
+#         # Recycling coefficient
+#         recyc = dg2d_kwargs.get("recyc", 0.98)
+#         # Wall Material
+#         material = dg2d_kwargs.get("material","C")
+#         # Wall temperature in Kelvin
+#         walltemp = dg2d_kwargs.get("walltemp",300.0)
+#         # When refining mesh, this is the largest segment permitted along the wall [m]
+#         # max distance along limiter for triangulation. Roughly sets the spatial res.
+#         dlim_max = dg2d_kwargs.get("dlim_max", 0.02)
+#         minarea = dg2d_kwargs.get("minarea",-1)
+#         # This is an optional point on/near the limiter to index as 0.
+#         # This can assist with defining distributed sources using the "start:end" method.
+#         # Set to None to disable.
+#         # Set to (1.0128, 1.2053) [m] for the upper HFS edge.
+#         RZlim_start = dg2d_kwargs.get("RZlim_start", None)
+
+#         # From the degas2/scripts/dg2d.py
+#         geo_kw = dict(recyc_coef=recyc, 
+#                       Twall=walltemp,
+#                       dlim_max=dlim_max,
+#                       clockwise=True, # Not sure why this is True, default is False.
+#                       RZlim_start=RZlim_start, # Upper HFS point on limiter.
+#                       minarea=minarea,
+#                  )
+#         if custom_tri:
+#             tri_basename = dg2d_kwargs.get("custom_tri_basename", "flux_surfaces")
+#             # check for necessary files,
+#             for ext in [".ele", ".node"]:
+#                 check_for_file(tri_basename+ext, fail=True)
+#             # generate the geometry files,
+#             # this script will write, 
+#             # 1. the dg2d.in file
+#             # 2. the wallfile. 
+#             from xgcpost import write_geometry_files
+#             write_geometry_files(material=material,
+#                 recyc=recyc,
+#                 walltemp=walltemp,
+#                 use_xgc_mesh=True,
+#                 polygonfilename="polygons.nc",
+#                 trifile_base=tri_basename,
+#                 make_plot=False,
+#             )
+#             # NOTE: psifunc is still defined from above.
+#         else:
+#             # Use the new DG2D class to deal with cases direct from a gEQDSK file...
+#             # dg2d.setup(material, recyc, gfile=geqdsk_file, walltemp=walltemp, run_dg2d=False)
+#     	    # OLD...
+#             # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
+#             # the psifunc is used later when we run defineback.
+#             psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
+#             # outputs = ['wallfile.txt','dg2d.in']
+#         # >>>>
+#         print("Running definegeometry2d...\n")
+#         subprocess.run(d2path+"/definegeometry2d dg2d.in",shell=True)
+#         # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]
+#         # <<<<
+#     else:
+#         # We can skip this if a 'geometry.nc' file is provided.
+#         # I don't think we actually need the 'polygons.nc' file.
+#         print("Skipping definegeometry2d...\n")
+#         check_for_file("geometry.nc", fail=True)
 
 # ----------------
 # DEGAS2 defineback,
@@ -231,7 +295,7 @@ if run_defineback:
         check_for_file("plasmafile.txt", fail=True)
     else:
         back_kw = dict(psi_data=psi_data, rot_data=omega_data, ni_data=ni_data)
-        defineback.generate_plasma_file_through_psi(ne_data, Te_data, Ti_data, psifunc,**back_kw)
+        defineback.generate_plasma_file_through_psi(ne_data, Te_data, Ti_data, psifunc, **back_kw)
         # outputs = ['plasmafile.txt']
 
     n_sourcegroups = db_kwargs.get("n_sourcegroups", 1)

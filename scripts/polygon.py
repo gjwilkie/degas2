@@ -179,41 +179,37 @@ class Polygon:
     # wallnodes is a collection of integer identifiers that make up the outer wall
     # they must go *counter*-clockwise, start with the innermost, share a common wall (wallid)
 
-    def close_in_universal_cell(f,wallnodes,wallid,stratum,material,recyc,debug=False,clockwise=False,walltemp=300.0):
+    def close_in_universal_cell(f,wallnodes,stratum,material='C',recyc=0.98,walltemp=300.0,exitzone=True,debug=False,clockwise=False):
         """
         A widely used method to envelop the plasma/vacuum domain within the universal cell; otherwise closed by a solid surface with specified properties
 
         Args:
-            f: opened dg2d.in file ready to write the solid zones.
+            f: opened dg2d.in file ready to write the zone/polygons necessary to close in the universal cell.
             wallnodes: list of Vertices that enclose the plasma zones.
             stratum: integer or string; first unused stratum to write
-            material: string for the wall material to use
-            recyc: recycling coefficient for the wall
+        Kwargs:
+            material: (optional) string for the wall material to use
+            recyc: (optional) recycling coefficient for the wall
+            walltemp: (optional) float for the wall temperature in Kelvin
+            exitzone: (optional) Whether to make the polygon that connects to the universal cell an exit-zone.
             debug: (optional) If true, intends for definegeometry2d to write out the polygon for debugging instead of generating the geometry.
             clockwise: (optional) If true, wallnodes are specified in clockwise order.
-            walltemp: (optional) float for the wall temperature in Kelvin
         """
+        zone_type = "exit" if exitzone else "solid"
 
-        f.write("new_zone solid\n")
+        f.write(f"new_zone {zone_type}\n")
         f.write("new_polygon\n")
-        f.write("  material "+material+"\n")
-        f.write("  recyc_coef "+str(recyc)+"\n")
-        f.write("  temperature "+str(walltemp)+"\n")
+        if not exitzone:
+            f.write("  material "+material+"\n")
+            f.write("  recyc_coef "+str(recyc)+"\n")
+            f.write("  temperature "+str(walltemp)+"\n")
         f.write("  stratum "+str(stratum)+"\n")
         if clockwise:
-            f.write("  wall "+str(wallid+1)+" "+\
-                str(wallnodes[1].id)+" "+\
-                str(wallnodes[1].id)+"\n")
-            f.write("  wall "+str(wallid+1)+" "+\
-                str(wallnodes[0].id)+" "+\
-                str(wallnodes[0].id)+"\n")
+            f.write(f"  wall {wallnodes[1].wall_id} {wallnodes[1].id} {wallnodes[1].id}\n")
+            f.write(f"  wall {wallnodes[0].wall_id} {wallnodes[0].id} {wallnodes[0].id}\n")
         else:
-            f.write("  wall "+str(wallid+1)+" "+\
-                str(wallnodes[0].id)+" "+\
-                str(wallnodes[0].id)+"\n")
-            f.write("  wall "+str(wallid+1)+" "+\
-                str(wallnodes[1].id)+" "+\
-                str(wallnodes[1].id)+"\n")
+            f.write(f"  wall {wallnodes[0].wall_id} {wallnodes[0].id} {wallnodes[0].id}\n")
+            f.write(f"  wall {wallnodes[1].wall_id} {wallnodes[1].id} {wallnodes[1].id}\n")
         f.write("  outer 0 1\n")
         if debug:
             f.write("  print_polygon poly.out1.dat\n")
@@ -223,32 +219,26 @@ class Polygon:
         f.write("\n")
         #f.write("new_zone solid\n")
         f.write("new_polygon\n")
-        f.write("  material "+material+"\n")
-        f.write("  recyc_coef "+str(recyc)+"\n")
-        f.write("  temperature "+str(walltemp)+"\n")
+        if not exitzone:
+            f.write("  material "+material+"\n")
+            f.write("  recyc_coef "+str(recyc)+"\n")
+            f.write("  temperature "+str(walltemp)+"\n")
         f.write("  stratum "+str(stratum+1)+"\n")
         written_ids = []
         if clockwise:
-            f.write("  wall "+str(wallid+1)+" "+
-                str(wallnodes[0].id)+" "+str(wallnodes[0].id)+"\n")
+            f.write(f"  wall {wallnodes[0].wall_id} {wallnodes[0].id} {wallnodes[0].id}\n")
             written_ids.append(wallnodes[0].id)
 
             for node in wallnodes[-1:0:-1]:
                 if not node.id in written_ids:
-                    f.write("  wall "+str(wallid+1)+" "+\
-                        str(node.id)+" "+\
-                        str(node.id)+"\n")
+                    f.write(f"  wall {node.wall_id} {node.id} {node.id}\n")
                     written_ids.append(node.id)
         else:
             for node in wallnodes[1:]:
                 if not node.id in written_ids:
-                    f.write("  wall "+str(wallid+1)+" "+\
-                        str(node.id)+" "+\
-                        str(node.id)+"\n")
+                    f.write(f"  wall {node.wall_id} {node.id} {node.id}\n")
                     written_ids.append(node.id)
-            f.write("  wall "+str(wallid+1)+" "+\
-                str(wallnodes[0].id)+" "+\
-                str(wallnodes[0].id)+"\n")
+            f.write(f"  wall {wallnodes[0].wall_id} {wallnodes[0].id} {wallnodes[0].id}\n")
         f.write("  outer 1 2 3 4\n")
         if debug:
             f.write("  print_polygon poly.out2.dat\n")
@@ -256,7 +246,6 @@ class Polygon:
         else:
             f.write("  triangulate_polygon\n")
         f.write("\n")
-
 
     # Writes the polygon to file f
     # If debug, include lines that output polygons to poly.X.dat files
@@ -387,6 +376,170 @@ class Polygon:
                 startidx = i
         return startidx
 
+    def pad_with_aux_polys(self, target_thickness=0.005, return_numpy=False, new_wall_from_aux=False):
+        """ 
+        Pads this Polygon instance with 'auxiliary' wall polygons.
+        Strictly preserves memory mapping between the inner vertices of this Polygon 
+        and the newly generated outer vertices.
+
+        Args:
+            target_thickness: (optional) float for the thickness in meters. Defaults to 5mm.
+            return_numpy: (optional) bool, if True returns raw numpy arrays (P, P_inflated, quads) 
+                          instead of instantiated Vertex/Polygon objects.
+        Returns:
+            If return_numpy=False:
+                aux_polys: list of auxiliary Polygons representing independent wall behavior.
+                newoutpoly: Polygon representing the outer points of the auxiliary polygons.
+                newvertices: Vertices added to create auxiliary wall polygons.
+            If return_numpy=True:
+                P, P_inflated, quads (as raw numpy arrays)
+        """
+        def polygon_area(points):
+            """Calculate the signed area of a polygon to determine orientation."""
+            x, y = points[:, 0], points[:, 1]
+            return 0.5 * np.sum(x * np.roll(y, -1) - y * np.roll(x, -1))
+
+        # Assemble np.array of this Polygon's verts
+        original_points = np.array([v.coords for v in self.vertices]) # (N_vert, 2)
+        N_og_verts = len(original_points)
+
+        # 1. Handle closed loops
+        is_closed = False
+        if np.allclose(original_points[0], original_points[-1]):
+            is_closed = True
+            P = original_points[:-1].copy()
+        else:
+            P = original_points.copy()
+            
+        # 2. Ensure strictly CCW orientation for outward normal math
+        was_reversed = False
+        if polygon_area(P) < 0:
+            was_reversed = True
+            P = P[::-1]
+            
+        N = len(P)
+        
+        # 3. Compute edge vectors and lengths
+        P_next = np.roll(P, -1, axis=0)
+        E = P_next - P
+        L = np.linalg.norm(E, axis=1)
+        
+        valid_L = np.where(L == 0, 1e-8, L)
+        E_dir = E / valid_L[:, None]
+        
+        # 4. Outward edge normals
+        N_edge = np.column_stack((E_dir[:, 1], -E_dir[:, 0]))
+        
+        # 5. Compute vertex normals
+        N_prev = np.roll(N_edge, 1, axis=0)
+        N_curr = N_edge
+        V_norm = N_prev + N_curr
+        V_len = np.linalg.norm(V_norm, axis=1)
+        
+        valid_V = V_len > 1e-8
+        V_norm[valid_V] = V_norm[valid_V] / V_len[valid_V, None]
+        V_norm[~valid_V] = E_dir[~valid_V]
+        
+        # 6. Determine geometry scaling
+        cos_theta = np.sum(V_norm * N_curr, axis=1)
+        cos_theta = np.clip(cos_theta, 0.1, 1.0) 
+        
+        D = np.full(N, target_thickness, dtype=float)
+        
+        # 7. Local Self-Intersection Prevention (Swallowtail elimination)
+        E_prev_dir = np.roll(E_dir, 1, axis=0)
+        cross_prod = E_prev_dir[:, 0] * E_dir[:, 1] - E_prev_dir[:, 1] * E_dir[:, 0]
+        
+        is_concave = cross_prod < -1e-6
+        if np.any(is_concave):
+            L_prev = np.roll(L, 1)
+            sin_theta = np.sqrt(1 - cos_theta**2)
+            
+            valid_sin = sin_theta > 1e-8
+            cot_theta = np.zeros_like(cos_theta)
+            cot_theta[valid_sin] = cos_theta[valid_sin] / sin_theta[valid_sin]
+            cot_theta[~valid_sin] = 1e6 # Infinite safe distance
+            
+            safe_D = 0.5 * np.minimum(L_prev, L) * cot_theta
+            D[is_concave] = np.minimum(D[is_concave], safe_D[is_concave])
+
+        # 8. Apply the calculated offsets
+        offset_lengths = D / cos_theta
+        P_inflated = P + V_norm * offset_lengths[:, None]
+        
+        # 9. Restore original input orientation and length mappings
+        if was_reversed:
+            P = P[::-1]
+            P_inflated = P_inflated[::-1]
+            
+        if is_closed:
+            P = np.vstack((P, P[0]))
+            P_inflated = np.vstack((P_inflated, P_inflated[0]))
+
+        num_edges = N_og_verts - 1 if is_closed else N_og_verts
+
+        # --- Numpy Output Early Exit ---
+        if return_numpy:
+            quads = []
+            for i in range(num_edges):
+                next_i = (i + 1) % N_og_verts
+                quad = np.array([
+                    P[i], 
+                    P[next_i], 
+                    P_inflated[next_i], 
+                    P_inflated[i]
+                ])
+                quads.append(quad)
+            return P, P_inflated, quads
+
+        # --- API Object Construction ---
+        
+        # Dynamically determine the next available ID for the new Vertices
+        # We try to read a `.id` attribute; if it fails, we fall back to index-based counting.
+        if new_wall_from_aux:
+            firstid = 0
+            wall_id = max([v.wall_id for v in self.vertices if v.wall_id is not None]) + 1
+            increment = True
+        else:
+            try:
+                firstid = max(v.id for v in self.vertices) + 1
+            except (AttributeError, ValueError):
+                firstid = len(self.vertices) + 1
+            wall_id = max([v.wall_id for v in self.vertices if v.wall_id is not None])
+            increment = False
+
+        # 10. Generate the Vertex objects for the outer boundary ONLY
+        newvertices = []
+        for i in range(N_og_verts):
+            newvertices.append(Vertex(firstid + i, P_inflated[i, 0], P_inflated[i, 1], wall_id=wall_id))
+
+        # 11. Build the new outer Polygon
+        newoutpoly = Polygon(increment=increment)
+        for v in newvertices:
+            newoutpoly.add_vertex(v)
+
+        # 12. Build the aux_polys using EXISTING inner vertices and NEW outer vertices
+        aux_polys = []
+        
+        for i in range(num_edges):
+            next_i = (i + 1) % N_og_verts
+            newpoly = Polygon()
+            
+            # Maintain exact CW/CCW ordering parity with the original function
+            if self.is_clockwise():
+                newpoly.add_vertex(self.vertices[next_i])
+                newpoly.add_vertex(self.vertices[i])
+                newpoly.add_vertex(newvertices[i])
+                newpoly.add_vertex(newvertices[next_i])
+            else:
+                newpoly.add_vertex(self.vertices[i])
+                newpoly.add_vertex(self.vertices[next_i])
+                newpoly.add_vertex(newvertices[next_i])
+                newpoly.add_vertex(newvertices[i])
+                
+            aux_polys.append(newpoly)
+            
+        return aux_polys, newoutpoly, newvertices
             
     def build_aux_wall_polygons(self,firstid,thickness=0.005):
         """
@@ -739,7 +892,7 @@ class Vertex:
         wall: Boolean flag for whether this vertex is "outer"; along the wall.
         wall_id: Id for the vertex in the context of the "wallfile". Inconsistent implementation?
     """
-    def __init__(self,id_in,R,Z):
+    def __init__(self,id_in,R,Z, wall=False, wall_id=None):
         """
         Constructor for Vertex class instance.
 
@@ -751,8 +904,8 @@ class Vertex:
 
         self.coords = [R,Z]
         self.id = id_in 
-        self.wall = False
-        self.wall_id = None
+        self.wall = wall
+        self.wall_id = wall_id
 
     # Nodes are the same the coordinates are equal
     def __eq__(self,other):

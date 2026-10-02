@@ -494,17 +494,17 @@ not-coincidental similarity to |diag_grp_init|.
       end if
       assert(num == i_tot)
       var=sc_diag_energy
-      tab_index=64
-      var_min=const(1.,-1)      // 0.1 eV $\rightarrow$ 10 keV with 64 ln-spaced steps.
+      tab_index=64              // Default: 0.1 eV $\rightarrow$ 10 keV with 16 ln-spaced steps.
+      var_min=const(1.,-2)      // Extended: 0.01 eV ($\approx$ 100 K) $\rightarrow$ 10 keV with 64 ln-spaced steps.
       var_max=const(1.,5)
       mult=electron_charge
       spacing=sc_diag_spacing_log
       call diag_grp_init('Wall and Target Energy Spectrum',num,var,tab_index,
      $     var_min,var_max,mult,spacing,grp_sectors)
       
-      var=sc_diag_angle
-      tab_index=16
-      var_min=const(1.,1)      // 10 to 90 degrees in 5 degree increments.
+      var=sc_diag_angle        // Default: 10 to 90 [deg] in 5 degree increments.
+      tab_index=18             // tab_index=16; var_min=const(1.,1); var_max=const(9,1)
+      var_min=0.               
       var_max=const(9,1)
       mult=PI/const(1.8,2)
       spacing=sc_diag_spacing_linear

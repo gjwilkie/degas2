@@ -990,7 +990,7 @@ by higher ranks when they are included.
       
       integer nunit,jscore,ivar,imin,imax           // Input
 
-      integer pointer,i,sec,zone                    // Local
+      integer pointer,i,sec,zone,k,axis_idx         // Local
       real energy,angle,wavelength,circum,area
 
       character*LINELEN type_string
@@ -1135,28 +1135,92 @@ by higher ranks when they are included.
          write(nunit,*) ' Nothing written yet for strata segment'
       else if (ivar == tl_index_energy_bin) then
          pointer=tally_geometry_ptr[jscore]
+         axis_idx=int_unused
+         do k=1,sc_diag_max_axes
+            if (diagnostic_grp_var_axes(k, pointer) != int_unused) then
+               if (diagnostic_var[diagnostic_grp_var_axes(k, pointer)] == sc_diag_energy) then
+                  axis_idx=diagnostic_grp_var_axes(k, pointer)
+               end if
+            end if
+         end do
+         assert(axis_idx != int_unused)
          write(nunit,*) ' ENERGY BINS for diagnostic ''',
      $        trim(diagnostic_grp_name[pointer]),''':'
          write(nunit,*)
          write(nunit,'(1x,a,4x,a)') 'bin','energy (eV)'
          do i=imin,imax
-            energy=diagnostic_min[pointer]
-     $           +(areal(i)-half)*diagnostic_delta[pointer]
-            if (diagnostic_spacing[pointer] == sc_diag_spacing_log)
+            energy=diagnostic_min[axis_idx]
+     $           +(areal(i)-half)*diagnostic_delta[axis_idx]
+            if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log)
      $           energy=exp(energy)
             energy/=electron_charge   // J to eV
             write(nunit,'(i4,2x,1pe13.5)') i,energy
          end do
       else if (ivar == tl_index_angle_bin) then
          pointer=tally_geometry_ptr[jscore]
+         axis_idx=int_unused
+         do k=1,sc_diag_max_axes
+            if (diagnostic_grp_var_axes(k, pointer) != int_unused) then
+               if (diagnostic_var[diagnostic_grp_var_axes(k, pointer)] == sc_diag_angle) then
+                  axis_idx=diagnostic_grp_var_axes(k, pointer)
+               end if
+            end if
+         end do
+         assert(axis_idx != int_unused)
          write(nunit,*) ' ANGLE BINS for diagnostic ''',
      $        trim(diagnostic_grp_name[pointer]),''':'
          write(nunit,*)
          write(nunit,'(1x,a,3x,a)') 'bin','angle (degrees)'
          do i=imin,imax
-            angle=diagnostic_min[pointer]
-     $           +(areal(i)-half)*diagnostic_delta[pointer]
-            if (diagnostic_spacing[pointer] == sc_diag_spacing_log)
+            angle=diagnostic_min[axis_idx]
+     $           +(areal(i)-half)*diagnostic_delta[axis_idx]
+            if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log)
+     $           angle=exp(angle)
+            angle*=const(1.8,2)/PI      // radians to degrees
+            write(nunit,'(i4,3x,1pe13.5)') i,angle
+         end do
+      else if (ivar == tl_index_energy_2d_bin) then
+         pointer=tally_geometry_ptr[jscore]
+         axis_idx=int_unused
+         do k=1,sc_diag_max_axes
+            if (diagnostic_grp_var_axes(k, pointer) != int_unused) then
+               if (diagnostic_var[diagnostic_grp_var_axes(k, pointer)] == sc_diag_energy_2d) then
+                  axis_idx=diagnostic_grp_var_axes(k, pointer)
+               end if
+            end if
+         end do
+         assert(axis_idx != int_unused)
+         write(nunit,*) ' 2D ENERGY BINS for diagnostic ''',
+     $        trim(diagnostic_grp_name[pointer]),''':'
+         write(nunit,*)
+         write(nunit,'(1x,a,4x,a)') 'bin','energy (eV)'
+         do i=imin,imax
+            energy=diagnostic_min[axis_idx]
+     $           +(areal(i)-half)*diagnostic_delta[axis_idx]
+            if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log)
+     $           energy=exp(energy)
+            energy/=electron_charge   // J to eV
+            write(nunit,'(i4,2x,1pe13.5)') i,energy
+         end do
+      else if (ivar == tl_index_angle_2d_bin) then
+         pointer=tally_geometry_ptr[jscore]
+         axis_idx=int_unused
+         do k=1,sc_diag_max_axes
+            if (diagnostic_grp_var_axes(k, pointer) != int_unused) then
+               if (diagnostic_var[diagnostic_grp_var_axes(k, pointer)] == sc_diag_angle_2d) then
+                  axis_idx=diagnostic_grp_var_axes(k, pointer)
+               end if
+            end if
+         end do
+         assert(axis_idx != int_unused)
+         write(nunit,*) ' 2D ANGLE BINS for diagnostic ''',
+     $        trim(diagnostic_grp_name[pointer]),''':'
+         write(nunit,*)
+         write(nunit,'(1x,a,3x,a)') 'bin','angle (degrees)'
+         do i=imin,imax
+            angle=diagnostic_min[axis_idx]
+     $           +(areal(i)-half)*diagnostic_delta[axis_idx]
+            if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log)
      $           angle=exp(angle)
             angle*=const(1.8,2)/PI      // radians to degrees
             write(nunit,'(i4,3x,1pe13.5)') i,angle

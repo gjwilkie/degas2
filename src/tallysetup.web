@@ -448,7 +448,7 @@ this ``equivalence'' is defined in the species input file.
 
       integer pointer,i,icv,test,pr_reac,        // Local
      $     num_conversions,type,geometry,sub_section,b,e,p,rank,
-     $     length,generic,num_equiv
+     $     length,generic,num_equiv,k,axis_idx
       integer indep_var[tl_rank_max],tab_index[tl_rank_max],
      $     conversions[tl_cv_max_conversions],estimator[pr_rc_max],
      $     conversion_packages[cv_max_package][cv_max_parameter],
@@ -787,10 +787,30 @@ eof: continue
             assert(type == tl_type_sector)
             tab_index[i]=diagnostic_num_sectors[pointer]
          else if (indep_var[i] == tl_index_energy_bin 
-     $           || indep_var[i] == tl_index_angle_bin) then
+     $           || indep_var[i] == tl_index_angle_bin
+     $           || indep_var[i] == tl_index_energy_2d_bin
+     $           || indep_var[i] == tl_index_angle_2d_bin) then
             assert(pointer > 0 && pointer <= sc_diagnostic_grps)
             assert(type == tl_type_sector)
-            tab_index[i]=diagnostic_tab_index[pointer]
+            tab_index[i]=0
+            do k=1,sc_diag_max_axes
+               axis_idx=diagnostic_grp_var_axes(k, pointer)
+               if (axis_idx != int_unused) then
+                  if (indep_var[i] == tl_index_energy_bin 
+     $                && diagnostic_var[axis_idx] == sc_diag_energy) then
+                     tab_index[i]=diagnostic_tab_index[axis_idx]
+                  else if (indep_var[i] == tl_index_angle_bin 
+     $                && diagnostic_var[axis_idx] == sc_diag_angle) then
+                     tab_index[i]=diagnostic_tab_index[axis_idx]
+                  else if (indep_var[i] == tl_index_energy_2d_bin 
+     $                && diagnostic_var[axis_idx] == sc_diag_energy_2d) then
+                     tab_index[i]=diagnostic_tab_index[axis_idx]
+                  else if (indep_var[i] == tl_index_angle_2d_bin 
+     $                && diagnostic_var[axis_idx] == sc_diag_angle_2d) then
+                     tab_index[i]=diagnostic_tab_index[axis_idx]
+                  end if
+               end if
+            end do
          else if (indep_var[i] == tl_index_wavelength_bin) then
             assert(pointer > 0 && pointer <= de_grps)
             assert(type == tl_type_reaction)
@@ -1247,11 +1267,13 @@ possibly be used to {\em replace} the separate arrays in the tally class.
       tally_var_list[tl_index_diagnostic]='diagnostic'
       tally_var_list[tl_index_zone_ind_1]='zone_ind_1'
       tally_var_list[tl_index_zone_ind_2]='zone_ind_2'
+      tally_var_list[tl_index_energy_2d_bin]='energy_2d_bin'
+      tally_var_list[tl_index_angle_2d_bin]='angle_2d_bin'
 
 /*
    Do loop starts with {\em last} of the above.
 */
-      do i=tl_index_zone_ind_2+1,tl_index_max
+      do i=tl_index_angle_2d_bin+1,tl_index_max
          tally_var_list[i]=char_unused
       end do
 

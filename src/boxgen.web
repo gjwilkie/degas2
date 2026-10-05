@@ -648,6 +648,7 @@ purposes of scoring.
 @#endif      
 
       call default_diag_setup
+      // call bispectrum_diag_setup // Disabled by default, significantly increases memory usage of outputs.
 
       call end_sectors
 

@@ -50,9 +50,13 @@
 @m sc_diagnostic(grp) 6+grp-1 @;  // I guess this will work as long as new ones go in before here
 @m sc_type_max 17
 
+@m sc_diag_max_axes 5 // Maximum number of dimensions for a diagnostic group.
+
 @m sc_diag_unknown 0  // Independent variables for diagnostic groups
 @m sc_diag_energy 1
 @m sc_diag_angle 2
+@m sc_diag_energy_2d 3
+@m sc_diag_angle_2d 4
 
 @m sc_diag_spacing_unknown 0
 @m sc_diag_spacing_linear 1
@@ -136,17 +140,22 @@ starting them at $0$, the dimensions have a length of at least $1$.
       define_dimen_pk(sc,sc_diag_name_string,sc_diag_name_len)
       define_dimen_pk(sc,diag_grp_ind,0,sc_diagnostic_grps)  
 
+      define_dimen_pk(sc,diag_axis_num,1,sc_diag_max_axes)
+      define_var_pk(sc,sc_diag_axes,INT)
+      define_dimen_pk(sc,diag_axis_ind,0,sc_diag_axes)
+
       define_var_pk(sc,sc_diag_max_bins,INT)             
 
       define_varp_pk(sc,diagnostic_grp_name,CHAR,sc_diag_name_string,diag_grp_ind)
       define_varp_pk(sc,diagnostic_num_sectors,INT,diag_grp_ind)
+      define_varp_pk(sc,diagnostic_grp_var_axes,INT,diag_axis_num,diag_grp_ind)
 
-      define_varp_pk(sc,diagnostic_var,INT,diag_grp_ind)        
+      define_varp_pk(sc,diagnostic_var,INT,diag_axis_ind)        
                                                                 
-      define_varp_pk(sc,diagnostic_tab_index,INT,diag_grp_ind)  
-      define_varp_pk(sc,diagnostic_min,FLOAT,diag_grp_ind)      
-      define_varp_pk(sc,diagnostic_delta,FLOAT,diag_grp_ind)
-      define_varp_pk(sc,diagnostic_spacing,INT,diag_grp_ind)
+      define_varp_pk(sc,diagnostic_tab_index,INT,diag_axis_ind)
+      define_varp_pk(sc,diagnostic_min,FLOAT,diag_axis_ind)
+      define_varp_pk(sc,diagnostic_delta,FLOAT,diag_axis_ind)
+      define_varp_pk(sc,diagnostic_spacing,INT,diag_axis_ind)
       
       define_varp_pk(sc,diagnostic_grp_base,INT,diag_grp_ind) 
       define_var_pk(sc,sc_diag_size,INT)                      

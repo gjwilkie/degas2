@@ -133,16 +133,23 @@ uninitialized; these are set in |boundaries_neighbors|.
       diagnostic_grp_name[sc_diagnostic_grps]=char_unused
       var_realloca(diagnostic_num_sectors)
       diagnostic_num_sectors[sc_diagnostic_grps]=int_unused
+      var_realloca(diagnostic_grp_var_axes)
+      do i=1,sc_diag_max_axes
+         diagnostic_grp_var_axes(i, sc_diagnostic_grps)=int_unused
+      end do
+      
+      sc_diag_axes=0
       var_realloca(diagnostic_var)
-      diagnostic_var[sc_diagnostic_grps]=int_unused
+      diagnostic_var[sc_diag_axes]=int_unused
       var_realloca(diagnostic_tab_index)
-      diagnostic_tab_index[sc_diagnostic_grps]=int_unused
+      diagnostic_tab_index[sc_diag_axes]=int_unused
       var_realloca(diagnostic_min)
-      diagnostic_min[sc_diagnostic_grps]=real_unused
+      diagnostic_min[sc_diag_axes]=real_unused
       var_realloca(diagnostic_delta)
-      diagnostic_delta[sc_diagnostic_grps]=real_unused
+      diagnostic_delta[sc_diag_axes]=real_unused
       var_realloca(diagnostic_spacing)
-      diagnostic_spacing[sc_diagnostic_grps]=int_unused
+      diagnostic_spacing[sc_diag_axes]=int_unused
+
       var_realloca(diagnostic_grp_base)
       diagnostic_grp_base[sc_diagnostic_grps]=int_unused
 
@@ -473,6 +480,7 @@ uninitialized; these are set in |boundaries_neighbors|.
 
       var_reallocb(diagnostic_grp_name)
       var_reallocb(diagnostic_num_sectors)
+      var_reallocb(diagnostic_grp_var_axes)
       var_reallocb(diagnostic_var)
       var_reallocb(diagnostic_tab_index)
       var_reallocb(diagnostic_min)
@@ -1207,6 +1215,7 @@ break1:        continue
 @#endif
       var_free(diagnostic_grp_name)
       var_free(diagnostic_num_sectors)
+      var_free(diagnostic_grp_var_axes)
       var_free(diagnostic_var)
       var_free(diagnostic_tab_index)
       var_free(diagnostic_min)

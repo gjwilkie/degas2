@@ -496,7 +496,7 @@ not-coincidental similarity to |diag_grp_init|.
       var=sc_diag_energy
       tab_index=64              // Default: 0.1 eV $\rightarrow$ 10 keV with 16 ln-spaced steps.
       var_min=const(1.,-2)      // Extended: 0.01 eV ($\approx$ 100 K) $\rightarrow$ 10 keV with 64 ln-spaced steps.
-      var_max=const(1.,5)
+      var_max=const(1.,4)
       mult=electron_charge
       spacing=sc_diag_spacing_log
       call diag_grp_init('Wall and Target Energy Spectrum',num,var,tab_index,
@@ -510,6 +510,75 @@ not-coincidental similarity to |diag_grp_init|.
       spacing=sc_diag_spacing_linear
       call diag_grp_init('Wall and Target Angle Spectrum',num,var,tab_index,
      $     var_min,var_max,mult,spacing,grp_sectors)
+
+      var_free(grp_sectors)
+
+      return
+      end
+
+@ Set up 2D bispectrum (energy and angle) diagnostic.
+
+@<Functions...@>=
+      subroutine bispectrum_diag_setup
+      
+      define_dimen(sector_ind1,nsectors)
+      define_varp(grp_sectors,INT,sector_ind1)
+
+      implicit_none_f77
+      sc_common                                       // Common
+      implicit_none_f90
+      
+      integer num,var,tab_index,spacing,i,i_tot       // Local
+      real var_min,var_max,mult
+      integer var_2,tab_index_2,spacing_2
+      real var_min_2,var_max_2,mult_2
+
+      @<Memory allocation interface@>
+
+      declare_varp(grp_sectors)
+
+      var_alloc(grp_sectors)
+
+      num=sc_target_num+sc_wall_num
+      if (num <= 0) then
+         var_free(grp_sectors)
+         return
+      end if
+      i_tot=0
+      if (sc_target_num > 0) then
+         do i=1,sc_target_num
+            i_tot++
+            grp_sectors[i_tot]=target_sector[i]
+         end do
+      end if
+      if (sc_wall_num > 0) then
+         do i=1,sc_wall_num
+            i_tot++
+            grp_sectors[i_tot]=wall_sector[i]
+         end do
+      end if
+      assert(num == i_tot)
+      
+      var=sc_diag_energy_2d
+      
+      // Energy settings
+      tab_index=24
+      var_min=const(1.,-2)
+      var_max=const(1.,4)
+      mult=electron_charge
+      spacing=sc_diag_spacing_log
+      
+      // Angle settings
+      var_2=sc_diag_angle_2d
+      tab_index_2=9
+      var_min_2=0.               
+      var_max_2=const(9,1)
+      mult_2=PI/const(1.8,2)
+      spacing_2=sc_diag_spacing_linear
+      
+      call diag_grp_init_2d('Wall and Target Bispectrum',num,var,
+     $     tab_index,var_min,var_max,mult,spacing,
+     $     var_2,tab_index_2,var_min_2,var_max_2,mult_2,spacing_2,grp_sectors)
 
       var_free(grp_sectors)
 
@@ -538,6 +607,15 @@ not-coincidental similarity to |diag_grp_init|.
       assert(sc_diagnostic(sc_diagnostic_grps) <= sc_type_max)
       var_realloca(diagnostic_grp_name)
       var_realloca(diagnostic_num_sectors)
+      var_realloca(diagnostic_grp_var_axes)
+      
+      diagnostic_grp_name[sc_diagnostic_grps]=name
+      diagnostic_num_sectors[sc_diagnostic_grps]=num
+      do i=1,sc_diag_max_axes
+         diagnostic_grp_var_axes(i, sc_diagnostic_grps)=int_unused
+      end do
+      
+      sc_diag_axes++
       var_realloca(diagnostic_var)
       var_realloca(diagnostic_tab_index)
       var_realloca(diagnostic_min)
@@ -545,32 +623,31 @@ not-coincidental similarity to |diag_grp_init|.
       var_realloca(diagnostic_spacing)
       var_realloca(diagnostic_grp_base)
       
-      diagnostic_grp_name[sc_diagnostic_grps]=name
-      diagnostic_num_sectors[sc_diagnostic_grps]=num
-      diagnostic_var[sc_diagnostic_grps]=var
-      diagnostic_tab_index[sc_diagnostic_grps]=tab_index
+      diagnostic_grp_var_axes(1, sc_diagnostic_grps)=sc_diag_axes
+      diagnostic_var[sc_diag_axes]=var
+      diagnostic_tab_index[sc_diag_axes]=tab_index
       sc_diag_max_bins=max(sc_diag_max_bins,tab_index)
       if (tab_index > 0) then
          assert(var != sc_diag_unknown)
          if (spacing == sc_diag_spacing_linear) then
-            diagnostic_min[sc_diagnostic_grps]=var_min*mult
+            diagnostic_min[sc_diag_axes]=var_min*mult
 /*
    Note that |tab_index| is the {\em number of bins} here, not the number
       of points as this nomenclature is used elsewhere in the code.
 */
-            diagnostic_delta[sc_diagnostic_grps]=(var_max-var_min)*mult/tab_index
+            diagnostic_delta[sc_diag_axes]=(var_max-var_min)*mult/tab_index
          else if (spacing == sc_diag_spacing_log) then
-            diagnostic_min[sc_diagnostic_grps]=log(var_min*mult)
-            diagnostic_delta[sc_diagnostic_grps]=log(var_max/var_min)/tab_index
+            diagnostic_min[sc_diag_axes]=log(var_min*mult)
+            diagnostic_delta[sc_diag_axes]=log(var_max/var_min)/tab_index
          else
             assert('Unsupported spacing' == ' ')
          end if
-         diagnostic_spacing[sc_diagnostic_grps]=spacing
+         diagnostic_spacing[sc_diag_axes]=spacing
       else
          assert(var == sc_diag_unknown)
-         diagnostic_min[sc_diagnostic_grps]=zero
-         diagnostic_delta[sc_diagnostic_grps]=zero
-         diagnostic_spacing[sc_diagnostic_grps]=sc_diag_spacing_unknown
+         diagnostic_min[sc_diag_axes]=zero
+         diagnostic_delta[sc_diag_axes]=zero
+         diagnostic_spacing[sc_diag_axes]=sc_diag_spacing_unknown
       end if
 
       diagnostic_grp_base[sc_diagnostic_grps]=sc_diag_size
@@ -580,6 +657,107 @@ not-coincidental similarity to |diag_grp_init|.
    also that this will start off with a size of -1. This is what other
    |ragged_alloc| routines do.
 */
+      var_realloc(diagnostic_sector_tab,sc_diag_size-1,sc_diag_size-1+num)
+      sc_diag_size+=num
+
+      do i=1,num
+         diagnostic_sector(i,sc_diagnostic_grps)=grp_sectors[i]
+         sector_type_pointer[grp_sectors[i]][sc_diagnostic(sc_diagnostic_grps)]=i
+      end do
+
+      return
+      end
+
+@ Initialize a 2D diagnostic group.
+
+@<Functions...@>=
+      subroutine diag_grp_init_2d(name,num,var,tab_index,var_min,var_max,mult,
+     $   spacing,var_2,tab_index_2,var_min_2,var_max_2,mult_2,spacing_2,grp_sectors)
+      implicit_none_f77
+      sc_common                                    // Common
+      pr_common
+      implicit_none_f90
+
+      integer num,var,tab_index,spacing            // Input
+      integer var_2,tab_index_2,spacing_2
+      integer grp_sectors[*]
+      real var_min,var_max,mult
+      real var_min_2,var_max_2,mult_2
+      character*(*) name
+      integer i, axis_1, axis_2                    // Local
+
+      @<Memory allocation interface@>
+
+      sc_diagnostic_grps++
+      assert(sc_diagnostic(sc_diagnostic_grps) <= sc_type_max)
+      var_realloca(diagnostic_grp_name)
+      var_realloca(diagnostic_num_sectors)
+      var_realloca(diagnostic_grp_var_axes)
+      
+      diagnostic_grp_name[sc_diagnostic_grps]=name
+      diagnostic_num_sectors[sc_diagnostic_grps]=num
+      do i=1,sc_diag_max_axes
+         diagnostic_grp_var_axes(i, sc_diagnostic_grps)=int_unused
+      end do
+      
+      sc_diag_axes++
+      axis_1 = sc_diag_axes
+      sc_diag_axes++
+      axis_2 = sc_diag_axes
+      
+      var_realloca(diagnostic_var)
+      var_realloca(diagnostic_tab_index)
+      var_realloca(diagnostic_min)
+      var_realloca(diagnostic_delta)
+      var_realloca(diagnostic_spacing)
+      var_realloca(diagnostic_grp_base)
+      
+      diagnostic_grp_var_axes(1, sc_diagnostic_grps)=axis_1
+      diagnostic_grp_var_axes(2, sc_diagnostic_grps)=axis_2
+      
+      diagnostic_var[axis_1]=var
+      diagnostic_tab_index[axis_1]=tab_index
+      sc_diag_max_bins=max(sc_diag_max_bins,tab_index*tab_index_2)
+      
+      if (tab_index > 0) then
+         assert(var != sc_diag_unknown)
+         if (spacing == sc_diag_spacing_linear) then
+            diagnostic_min[axis_1]=var_min*mult
+            diagnostic_delta[axis_1]=(var_max-var_min)*mult/tab_index
+         else if (spacing == sc_diag_spacing_log) then
+            diagnostic_min[axis_1]=log(var_min*mult)
+            diagnostic_delta[axis_1]=log(var_max/var_min)/tab_index
+         else
+            assert('Unsupported spacing' == ' ')
+         end if
+         diagnostic_spacing[axis_1]=spacing
+      else
+         assert(var == sc_diag_unknown)
+         diagnostic_min[axis_1]=zero
+         diagnostic_delta[axis_1]=zero
+         diagnostic_spacing[axis_1]=sc_diag_spacing_unknown
+      end if
+      
+      diagnostic_var[axis_2]=var_2
+      diagnostic_tab_index[axis_2]=tab_index_2
+      if (tab_index_2 > 0) then
+         if (spacing_2 == sc_diag_spacing_linear) then
+            diagnostic_min[axis_2]=var_min_2*mult_2
+            diagnostic_delta[axis_2]=(var_max_2-var_min_2)*mult_2/tab_index_2
+         else if (spacing_2 == sc_diag_spacing_log) then
+            diagnostic_min[axis_2]=log(var_min_2*mult_2)
+            diagnostic_delta[axis_2]=log(var_max_2/var_min_2)/tab_index_2
+         else
+            assert('Unsupported spacing' == ' ')
+         end if
+         diagnostic_spacing[axis_2]=spacing_2
+      else
+         diagnostic_min[axis_2]=zero
+         diagnostic_delta[axis_2]=zero
+         diagnostic_spacing[axis_2]=sc_diag_spacing_unknown
+      end if
+
+      diagnostic_grp_base[sc_diagnostic_grps]=sc_diag_size
       var_realloc(diagnostic_sector_tab,sc_diag_size-1,sc_diag_size-1+num)
       sc_diag_size+=num
 

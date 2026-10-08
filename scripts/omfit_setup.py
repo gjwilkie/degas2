@@ -1,59 +1,156 @@
 # Created on Nov. 21, 2024 by Quinn Pratt
 # DEGAS2 setup inspired by 'micerscript.py' from A. Angulo and G. Wilkie
 # 
-# SETUP: This script calls degas2 executables which should be in the $DEGAS2_BIN directory. 
-#        Make sure degas2/scripts is added to $PYTHONPATH for the python modules below to be importable.
+# REQUIREMENTS
+#   - DEGAS2 executables must be in $DEGAS2_BIN directory. 
+#   - $DEGAS2_DIR/scripts must be added to $PYTHONPATH for certain imports below.
 #
-# The user should run the following commands (on the omega cluster at GA) before executing this scipt,
-# >> module purge
-# >> module load degas2
-# This will set up the necessary env. vars and modify the path/pythonpath.
-# 
-# This script is designed to run in a degas2 work-directory with some required files,
-# e.g. 'input_profiles.nc', 'geqdsk', 'tally.in', and 'degas2.in'
+# PUBLIC DEGAS2 INSTALLs
+#   - GA-OMEGA cluster,
+#       >> module purge
+#       >> module load degas2
+#   - PPPL-FLUX cluster,
+#       >> ?
+#
+# This script is designed to be called from a DEGAS2 work-directory (generally via OMFITx.executable)
+# The directory must have: input_profiles.nc, geqdsk, tally.in, and degas2.in.
 # 
 # ----------------
 # Core python,
 import os
+import glob
 import subprocess
 import sys
 import json
-# From degas2/scripts,
-import dg2d
-import problem
-import source
-import defineback
-import postprocess
+from time import perf_counter
+try:
+    # From degas2/scripts,
+    import dg2d
+    import problem
+    import source
+    import defineback
+    import postprocess
+except ImportError:
+    print("ERROR: (omfit_setup) Failed to import from Python API - is $DEGAS2_DIR/scripts in the PYTHONPATH?")
 # Other,
 import numpy as np
 import scipy.interpolate as interpolate
 import netCDF4 as nc
 #import matplotlib.pyplot as plt
 
-# ----------------
-# General,
-# - input files (for this script),
-profile_fname = "input_profiles.nc"
-geqdsk_fname = "geqdsk"
-setup_kwargs_fname = "omfit_setup_dict.json" # optional
+xid = "omfit_setup" # script ID.
+verbose = True
+all_programs = ['problemsetup', 'definegeometry2d', 'defineback', 'tallysetup']
+performance_dict = dict(zip(all_programs, [None]*len(all_programs)))
+
+d2path = os.environ.get('DEGAS2_BIN')
+if d2path is None:
+    print(f"ERROR: ({xid}) $DEGAS2_BIN not set! - load module or otherwise set env.")
+    exit(1)
+#d2path = os.environ["DEGAS2_BIN"] # set with >> module load degas2
+print(f"INFO: ({xid}) DEGAS2_BIN={d2path}")
+# --------------------------------
+# Local lib of helper functions,
 
 def check_for_file(filename, fail=False):
     """ Helper function, used throughout"""
     file_exists = os.path.exists(filename)
     if file_exists:
-        print(f"INFO (omfit_setup): found '{filename}'.")
+        print(f"INFO: ({xid}) found '{filename}'.")
     else:
         if fail:
-                print(f"ERROR (omfit_setup): '{filename}' not found - ending.")
+                print(f"ERROR: ({xid}) '{filename}' not found - ending.")
                 exit(1)
         else:
-            print(f"WARN (omfit_setup): '{filename}' not found.")
+            print(f"WARN: ({xid}) '{filename}' not found.")
     return file_exists
+
+def run_program(program, inputs=None, outputs=None, timeout_min=5):
+    """ Helper wrapper for running degas2 programs with subprocess.run()"""
+    spkw = dict(            # kwargs passed to subprocess.run() throughout.
+        shell=False,        # generally recommended to avoid shell injection (although unlikely in this case)
+        check=True,         # capture errors.
+        timeout=int(timeout_min*60),
+        )
+    if program not in all_programs:
+        raise ValueError(f"ERROR: ({xid}) 'run_program' wrapper encountered unknown program='{program}'.")
+    print(f"EXEC: ({xid}) Running {program}...")
+    command = [d2path+f"/{program}"]
+    if inputs is None:
+        inputs = []
+    else:
+        if not isinstance(inputs, list):
+            printe(f"ERROR: ({xid}) inputs kwarg to run_program() must be a list of str.")
+            exit(1)
+    command += inputs # append args to list.
+
+    try:
+        t0 = perf_counter()
+        subprocess.run(command, **spkw)
+        performance_dict[program] = perf_counter() - t0 # capture runtime.
+    except subprocess.CalledProcessError as e:
+        # This block triggers automatically if the command returns a non-zero exit code
+        message = f"""ERROR: DEGAS2 {program} failed!
+- Command: {' '.join(e.cmd)}
+- Exit code: {e.returncode}"""
+        print(message)
+        exit(1)
+    except FileNotFoundError:
+        # Triggers if the program/executable itself cannot be found on the system path
+        print(f"ERROR: The executable '{program}' was not found.")
+        exit(1)
+    except subprocess.TimeoutExpired as e:
+        print(f"ERROR: The executable '{program}' timed-out after {e.timeout} seconds.")
+        exit(1)
+    # if we made it to here, the program finished.
+    # check for outputs if given before declaring success.
+    if outputs is None:
+        success = True
+    else:
+        output_check = []
+        for f in outputs: 
+            output_check += [ check_for_file(f) ]
+        success = all(output_check)
+    if success:
+        print(f"EXEC: ({xid}) Completed {program}.\n")
+    else:        
+        print(f"WARN: ({xid}) Completed {program}, but some output files were not found...\n")
+    return success
+
+def print_performance():
+    print("="*32)
+    print(f"INFO: ({xid}) DEGAS2 performance report:")
+    print("Timing...")
+    for prog, time in performance_dict.items():
+        if isinstance(time, float):
+            print(f"\t- {prog} = {time:.3f} [sec]")
+        else:
+            print(f"\t- {prog} skipped")
+    
+    print("Memory use...")
+    total = 0
+    for ext in ['in','txt','nc']:
+        # Filter files in the current directory only
+        files = [f for f in glob.glob(f"*.{ext}") if os.path.isfile(f)]
+        # Sum the sizes and convert to MB
+        size = sum(os.path.getsize(f) for f in files) / (1024 * 1024)
+        print(f"\t- size of *.{ext} = {size:.3f} [MB]")
+        total += size
+    print(f"Total = {total:.3f} [MB]")
+    print("="*32)
+
+# --------------------------------
+# General,
+# - input files (for this script),
+profile_fname = "input_profiles.nc"
+geqdsk_fname = "geqdsk"
+setup_kwargs_fname = "omfit_setup_dict.json" # technically optional
 
 # Check for necessary files,
 necessary_files = [profile_fname, geqdsk_fname, 'tally.in', 'degas2.in']
 for f in necessary_files:
     check_for_file(f, fail=True)
+
 # Check for optional settings file,
 setup_kwargs_exists = check_for_file(setup_kwargs_fname)
 if setup_kwargs_exists:
@@ -61,12 +158,6 @@ if setup_kwargs_exists:
         setup_kwargs = json.load(f)
 else:
     setup_kwargs = dict()
-
-# ----------------
-# Macroscopic DEGAS2 setup,
-d2path = os.environ["DEGAS2_BIN"] # set with >> module load degas2
-# start with inputs = ['degas2.in','tally.in']
-print(f"INFO (omfit_setup): DEGAS2_BIN={d2path}")
 
 # ----------------
 # Magnetic equilibrium,
@@ -105,7 +196,7 @@ Ti_data = list(T_i) + [0.]# [eV]
 omega_data = list(profiles["omega"][:]) + [0.] # [rad/s]
 profiles.close()
 
-# ----------------
+# --------------------------------
 # DEGAS2 problemsetup,
 # From the degas2/scripts/problem.py
 run_problemsetup = setup_kwargs.get("run_problemsetup", True)
@@ -115,7 +206,7 @@ if run_problemsetup:
     custom_problem_input = problemsetup_kwargs.get("custom_problem_input", False)
     # 
     if custom_problem_input:
-        print(f"INFO (omfit_setup): Using custom 'problemsetup' inputs - check values in 'problem.in'")
+        print(f"INFO: ({xid}) Using custom 'problemsetup' inputs - verify values in 'problem.in'")
         # Gather args for 'generateProblemInput' from problemsetup_kwargs, use "C-D" as default,
         cd_problem_defaults = dict(test_species=["0","D","D2","D2+"],
                                background_species=["e","D+"],
@@ -131,16 +222,16 @@ if run_problemsetup:
     else:
         # Generates degas2 problem input files based on a predefined cases.
         std_problem_label = problemsetup_kwargs.get("std_problem_label","C-D")
-        print(f"INFO (omfit_setup): Using standard problem label='{std_problem_label}'")
+        print(f"INFO: ({xid}) Using standard problem label='{std_problem_label}'")
         p = problem.genStdProblem(std_problem_label)
+    
     # >>>>
-    print("Running problemsetup...\n")
-    subprocess.run(d2path+"/problemsetup",shell=True)
     # outputs = ['problem.in','problem.nc']
+    run_program("problemsetup", outputs=['problem.nc'])
     # <<<<
 else:
     # We can skip this if a 'problem.nc' file is provided,
-    print("Skipping problemsetup...\n")
+    print(f"INFO: ({xid}) Skipping problemsetup...\n")
     check_for_file("problem.nc", fail=True)
 
 # Check if recombination is present in the problem by parsing the problem.nc file.
@@ -150,12 +241,15 @@ rxn_dict = problem.get_reactions_from_problem("degas2.in", "problem.nc")
 rxn_names = list(rxn_dict.keys())
 recomb_included = any(["recomb" in s for s in rxn_names])
 if recomb_included:
-    print(f"INFO (omfit_setup): Recombination reaction found in problem.nc - will check for recomb_n_flights param.")
+    print(f"INFO: ({xid}) Recombination reaction found in problem.nc - will check for 'recomb_n_flights' param.")
 
-# ----------------
+# --------------------------------
 # DEGAS2 definegeometry2d,
-# NOTE: updated methods expect an auxiliary "limiterfile.txt" from OMFIT.
-#       I have not yet provided a fallback where this file is not provided...
+# WARN: updated workflow expects a "limiterfile.txt" from OMFIT.
+# TODO: 
+#       - option to write basic limiterfile.txt in degas2/scripts.
+#       - move code to read limiterfile.txt to degas2/scritpts.
+#       - carefully check cases where custom_tri=True but no limiter found (!)     
 run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
 if run_definegeometry2d:
     # 1. Unpack dg2d settings,
@@ -164,7 +258,7 @@ if run_definegeometry2d:
     # Whether or not we've been provided with a custom mesh in the form of Triangle .node/.ele files.
     custom_tri = dg2d_kwargs.get("custom_tri", False)
 
-    # 2. Read limiter file,
+    # 2. Read limiter file, TO DO: make DEGAS2/scripts/utils.py method to handle this.
     limiterfile_basename = dg2d_kwargs.get("limiterfile_basename", "limiterfile")
     limiterfile_fname = limiterfile_basename + ".txt"
     check_for_file(limiterfile_fname, fail=True)
@@ -199,87 +293,14 @@ if run_definegeometry2d:
     dg2d_obj.write_files(aux_thickness=0.005) # <-- this will write 'dg2d.in', and 'wallfile.txt'
 
     # >>>>
-    print("Running definegeometry2d...\n")
-    subprocess.run(d2path+"/definegeometry2d dg2d.in",shell=True)
     # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]
+    run_program("definegeometry2d", inputs=['dg2d.in'], outputs=['geometry.nc'])
     # <<<<
 else:
     # We can skip this if a 'geometry.nc' file is provided.
     # I don't think we actually need the 'polygons.nc' file.
-    print("Skipping definegeometry2d...\n")
+    print(f"INFO: ({xid}) Skipping definegeometry2d...\n")
     check_for_file("geometry.nc", fail=True)
-
-# if False:
-#     # ----------------
-#     # DEGAS2 definegeometry2d,
-#     # NOTE: defineback needs the psifunc interpolant to map the 1D profiles onto the
-#     #       psifunc is now defined above from the gEQDSK file.
-#     run_definegeometry2d = setup_kwargs.get("run_definegeometry2d", True)
-#     if run_definegeometry2d:
-#         dg2d_kwargs = setup_kwargs.get("definegeometry2d", {}) # dict of options for dg2d scripts.
-#         # Whether or not we've been provided with a custom mesh, 
-#         custom_tri = dg2d_kwargs.get("custom_tri", False)
-#         # Recycling coefficient
-#         recyc = dg2d_kwargs.get("recyc", 0.98)
-#         # Wall Material
-#         material = dg2d_kwargs.get("material","C")
-#         # Wall temperature in Kelvin
-#         walltemp = dg2d_kwargs.get("walltemp",300.0)
-#         # When refining mesh, this is the largest segment permitted along the wall [m]
-#         # max distance along limiter for triangulation. Roughly sets the spatial res.
-#         dlim_max = dg2d_kwargs.get("dlim_max", 0.02)
-#         minarea = dg2d_kwargs.get("minarea",-1)
-#         # This is an optional point on/near the limiter to index as 0.
-#         # This can assist with defining distributed sources using the "start:end" method.
-#         # Set to None to disable.
-#         # Set to (1.0128, 1.2053) [m] for the upper HFS edge.
-#         RZlim_start = dg2d_kwargs.get("RZlim_start", None)
-
-#         # From the degas2/scripts/dg2d.py
-#         geo_kw = dict(recyc_coef=recyc, 
-#                       Twall=walltemp,
-#                       dlim_max=dlim_max,
-#                       clockwise=True, # Not sure why this is True, default is False.
-#                       RZlim_start=RZlim_start, # Upper HFS point on limiter.
-#                       minarea=minarea,
-#                  )
-#         if custom_tri:
-#             tri_basename = dg2d_kwargs.get("custom_tri_basename", "flux_surfaces")
-#             # check for necessary files,
-#             for ext in [".ele", ".node"]:
-#                 check_for_file(tri_basename+ext, fail=True)
-#             # generate the geometry files,
-#             # this script will write, 
-#             # 1. the dg2d.in file
-#             # 2. the wallfile. 
-#             from xgcpost import write_geometry_files
-#             write_geometry_files(material=material,
-#                 recyc=recyc,
-#                 walltemp=walltemp,
-#                 use_xgc_mesh=True,
-#                 polygonfilename="polygons.nc",
-#                 trifile_base=tri_basename,
-#                 make_plot=False,
-#             )
-#             # NOTE: psifunc is still defined from above.
-#         else:
-#             # Use the new DG2D class to deal with cases direct from a gEQDSK file...
-#             # dg2d.setup(material, recyc, gfile=geqdsk_file, walltemp=walltemp, run_dg2d=False)
-#     	    # OLD...
-#             # This function uses the gEQDSK file to generate the \psi_n(R, Z) interpolant (psifunc).
-#             # the psifunc is used later when we run defineback.
-#             psifunc, nodes = dg2d.generateGeometryFromEFITfile(geqdsk_file, material, **geo_kw)
-#             # outputs = ['wallfile.txt','dg2d.in']
-#         # >>>>
-#         print("Running definegeometry2d...\n")
-#         subprocess.run(d2path+"/definegeometry2d dg2d.in",shell=True)
-#         # outputs = ["geometry.nc","geomtestc.silo","polygons.nc"]
-#         # <<<<
-#     else:
-#         # We can skip this if a 'geometry.nc' file is provided.
-#         # I don't think we actually need the 'polygons.nc' file.
-#         print("Skipping definegeometry2d...\n")
-#         check_for_file("geometry.nc", fail=True)
 
 # ----------------
 # DEGAS2 defineback,
@@ -336,12 +357,10 @@ if run_defineback:
         # outputs = ['sourcefile_{i}.txt']
         #   may only exist for large numbers of source segments.
         sourcegroups += [ source.Source(n_flights,source_type,source_species,**source_kw) ]
-    source.write_db_input(sourcegroups)
-    # outputs = ['db.in']
+    source.write_db_input(sourcegroups) # outputs = ['db.in']
     # >>>>
-    print("Running defineback...\n")
-    subprocess.run(d2path+"/defineback db.in",shell=True)
     # outputs = ['background.nc','density*.txt','temperature*.txt']
+    run_program("defineback", inputs=['db.in'], outputs=['background.nc'])
     # <<<<
 
     if recomb_included:
@@ -355,7 +374,7 @@ if run_defineback:
             ds.variables["source_num_flights"][-1] = recomb_n_flights
 else:
     # We can skip this if a 'background.nc' file is provided.
-    print("Skipping defineback...\n")
+    print(f"INFO: ({xid}) Skipping defineback...\n")
     check_for_file("background.nc", fail=True)
 
 # ----------------
@@ -364,13 +383,15 @@ run_tallysetup = setup_kwargs.get("run_tallysetup", True)
 if run_tallysetup:
     # Use supplied tally.in file
     # >>>>
-    print("Running tallysetup...\n")
-    subprocess.run(d2path+"/tallysetup",shell=True)
     # outputs = ['tally.nc']
+    run_program("tallysetup", outputs=['tally.nc'])
     # <<<<
 else:
     # We can skip this if a 'tally.nc' file is provided.
-    print("Skipping tallysetup...\n")
+    print(f"INFO: ({xid}) Skipping tallysetup...\n")
     check_for_file("tally.nc", fail=True)
 
-print("DONE (omfit_setup)")
+if verbose:
+    print_performance()
+
+print(f"DONE: ({xid})")

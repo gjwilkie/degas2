@@ -697,7 +697,7 @@ more than one scoring bin. Again, the affected bins are in an array |bins|.
             call handle_geometry(pt_args(p),tally_geometry[jscore],
      $           tally_geometry_ptr[jscore],tally_dep_var[jscore],
      $           scoring_data,number_segments,segments,geom_seg_label,
-     $           number_bins,bins,bin_label,geom_mult)
+     $           number_bins,bins,bin_label,geom_mult,index_parameters)
 
             do geom_seg=1,number_segments
                index_parameters[geom_seg_label]=segments[geom_seg]
@@ -801,13 +801,14 @@ tracked by those elements.
 @<Functions...@>=
       subroutine handle_geometry(pt_dummy(p),geometry,
      $     pointer,dep_var,scoring_data,number_segments,segments,
-     $     geom_seg_label,number_bins,bins,bin_label,geom_mult)
+     $     geom_seg_label,number_bins,bins,bin_label,geom_mult,
+     $     index_parameters)
 
       implicit_none_f77
       pr_common
       tl_common
       implicit_none_f90
-      
+
       tl_decls
 
       pt_decl(p)                                   // Input
@@ -819,6 +820,7 @@ tracked by those elements.
       integer segments[max_segments],number_bins[max_segments],
      $     bins[max_segments][max_bins]
       real geom_mult[max_segments][max_bins]
+      integer index_parameters[tl_index_unknown:tl_index_max]
 
       number_segments=0
       segments[1]=0
@@ -838,7 +840,8 @@ tracked by those elements.
       else if (geometry == tl_geom_surface) then
          call handle_diagnostics(pt_args(p),pointer,dep_var,
      $        scoring_data,number_segments,segments,
-     $        number_bins,bins,bin_label,geom_mult)
+     $        number_bins,bins,bin_label,geom_mult,
+     $        index_parameters)
          geom_seg_label=tl_index_diagnostic
       else
          assert("Untreated scoring geometry" == " ")
@@ -847,9 +850,9 @@ tracked by those elements.
       return
       end
 
-@ Determine which detectors (one or more) are involved in this score. The
-only independent variable tracked on these detectors presently is the
-wavelength of emissions. 
+      @ Determine which detectors (one or more) are involved in this score. The
+      only independent variable tracked on these detectors presently is the
+      wavelength of emissions.
 
 @<Functions...@>=
       subroutine handle_detectors(pt_dummy(p),pointer,dep_var,
@@ -1129,7 +1132,7 @@ bins. The treated variables thus far are energy and angle of incicidence.
 @<Functions...@>=
       subroutine handle_diagnostics(pt_dummy(p),pointer,dep_var,
      $  scoring_data,number_segments,segments,
-     $  number_bins,bins,bin_label,geom_mult)
+     $  number_bins,bins,bin_label,geom_mult,index_parameters)
 
       implicit_none_f77
       sc_common                                       // Common
@@ -1137,10 +1140,10 @@ bins. The treated variables thus far are energy and angle of incicidence.
       pr_common
       tl_common
       implicit_none_f90
-      
+
       pt_decls
       tl_decls
-      
+
       pt_decl(p)                                      // Input
       integer pointer,dep_var
       real scoring_data[scoring_data_max]
@@ -1149,10 +1152,12 @@ bins. The treated variables thus far are energy and angle of incicidence.
       integer segments[max_segments],number_bins[max_segments],
      $     bins[max_segments][max_bins]
       real geom_mult[max_segments][max_bins]
+      integer index_parameters[tl_index_unknown:tl_index_max]
 
       integer diag_grp,idiag,i_side,sector,           // Local
      $        i_sect,surface,count,subsector,zone      
       real value
+      integer ibin_1, k, axis_idx, axis_label
 
       lc_decls
 
@@ -1188,40 +1193,49 @@ bins. The treated variables thus far are energy and angle of incicidence.
                   number_segments++
                   assert(number_segments <= max_segments)
                   segments[number_segments]=idiag
-                  if (diagnostic_var[diag_grp] == sc_diag_energy) then
-                     bin_label=tl_index_energy_bin
-                     value=scoring_data[pr_var_energy]
-                  else if (diagnostic_var[diag_grp] == sc_diag_angle) then
-                     bin_label=tl_index_angle_bin
-                     value=scoring_data[pr_var_angle]
-                  else
-                     bin_label=tl_index_unknown
-                  end if
-
-                  if (bin_label != tl_index_unknown) then
-                     number_bins[number_segments]=1
-                     if (diagnostic_spacing[diag_grp] == sc_diag_spacing_log) 
-     $                    value=log(value)
-                     if (diagnostic_spacing[diag_grp] == sc_diag_spacing_log
-     $                    || diagnostic_spacing[diag_grp] == sc_diag_spacing_linear) then
-                        bins[number_segments][1]=int((value-diagnostic_min[diag_grp])
-     $                       /diagnostic_delta[diag_grp]+one)
-                     else
-                        assert('Unsupported spacing' == ' ')
+                  number_bins[number_segments]=1
+                  bins[number_segments][1]=0
+                  geom_mult[number_segments][1]=one
+                  bin_label=tl_index_unknown
+                  
+                  do k=1,sc_diag_max_axes
+                     axis_idx=diagnostic_grp_var_axes(k, diag_grp)
+                     if (axis_idx != int_unused) then
+                        if (diagnostic_var[axis_idx] != sc_diag_unknown) then
+                           if (diagnostic_var[axis_idx] == sc_diag_energy) then
+                              axis_label=tl_index_energy_bin
+                              value=scoring_data[pr_var_energy]
+                           else if (diagnostic_var[axis_idx] == sc_diag_angle) then
+                              axis_label=tl_index_angle_bin
+                              value=scoring_data[pr_var_angle]
+                           else if (diagnostic_var[axis_idx] == sc_diag_energy_2d) then
+                              axis_label=tl_index_energy_2d_bin
+                              value=scoring_data[pr_var_energy]
+                           else if (diagnostic_var[axis_idx] == sc_diag_angle_2d) then
+                              axis_label=tl_index_angle_2d_bin
+                              value=scoring_data[pr_var_angle]
+                           else
+                              assert('Unknown diagnostic variable' == ' ')
+                           end if
+                           if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log) then
+                              value=log(value)
+                           end if
+                           if (diagnostic_spacing[axis_idx] == sc_diag_spacing_log
+     $                          || diagnostic_spacing[axis_idx] == sc_diag_spacing_linear) then
+                              ibin_1=int((value-diagnostic_min[axis_idx])
+     $                             /diagnostic_delta[axis_idx]+one)
+                           else
+                              assert('Unsupported spacing' == ' ')
+                           end if
+                           if (ibin_1 > 0 && ibin_1 <= diagnostic_tab_index[axis_idx]) then
+                              index_parameters[axis_label]=ibin_1
+                           else
+                              index_parameters[axis_label]=1
+                              geom_mult[number_segments][1]=zero  // Outside bin range: throw out
+                           end if
+                        end if
                      end if
-                     if (bins[number_segments][1] > 0 
-     $                    && bins[number_segments][1] 
-     $                    <= diagnostic_tab_index[diag_grp]) then
-                        geom_mult[number_segments][1]=one
-                     else
-                        bins[number_segments][1]=1            
-                        geom_mult[number_segments][1]=zero  // Outside bin range: throw out
-                     end if
-                  else
-                     number_bins[number_segments]=1
-                     bins[number_segments][1]=0
-                     geom_mult[number_segments][1]=one
-                  end if                                    // |bin_label|
+                  end do
                end if                                       // |sc_diag_check|
             end do                                          // |i_sect|
          end if                                             // |sc_check|

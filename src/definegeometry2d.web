@@ -2164,6 +2164,7 @@ eof:  continue
          @<Setup Toroidally Facing Sectors@>
 
          call default_diag_setup
+         // call bispectrum_diag_setup // disabled by default, increases memory requirements.
 
          @<Setup Sector Diagnostics@>
 

@@ -76,6 +76,8 @@ there as well.
 @m tl_index_diagnostic 17
 @m tl_index_zone_ind_1 18
 @m tl_index_zone_ind_2 19
+@m tl_index_energy_2d_bin 20
+@m tl_index_angle_2d_bin 21
 @m tl_index_max 100               // An arbitrary limit
 
 @m tl_name_length 80              // For tally names

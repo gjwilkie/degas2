@@ -5805,19 +5805,22 @@ All of the views in the problem are characterized by:
     \item The first is taken as the starting point,
     \item The second fixes direction. 
   \end{itemize}
-  \item Angular halfwidth(s) (i.e., each view consists of a cone or
-pyramid with apex at the starting point); the rectangular algorithm
-requires two independent halfwidths, one for each perpendicular
-direction,
+  \item Angular halfwidth(s) or a radius (i.e., each view consists of a
+cone or pyramid with apex at the starting point, or a constant-radius
+collection tube with no apex); the rectangular algorithm requires two
+independent halfwidths, one for each perpendicular direction, while the
+cylindrical algorithm requires a single radius (a length, not an angle),
   \item An averaging algorithm, used to simulate the finite spatial
 resolution obtained with real detectors.
-The three techniques, each having 2-D and 3-D variants, available are
+The four techniques, each having 2-D and 3-D variants, available are
   \begin{itemize}
     \item Uniform weighting (i.e., square),
     \item Rectangular weighting (independent angular half-widths in two
 perpendicular directions, generalizing uniform weighting to non-square
 pyramids),
-    \item Circular weighting.
+    \item Circular weighting,
+    \item Cylindrical weighting (a constant-radius collection tube, with
+no angular divergence and no apex).
   \end{itemize}
   \item A binning variable,
   \begin{itemize}
@@ -5911,13 +5914,37 @@ limit), and the marginal distribution of a uniform rectangular pyramid
 along one perpendicular axis is uniform over that axis regardless of the
 other axis's extent. The uniform case is simply the $\delta_1 = \delta_2$
 special case of this.
+
+For the cylindrical case, the view is modeled as a flat ``column'': a
+band of half-width $\rho_0$ (a length, not an angle) confined to the
+symmetry plane. $N$ is fixed (currently $N=6$) rather than computed from
+$\rho_0$ via the ``30 virtual chords per degree'' rule, since $\rho_0$
+is not an angle. Each subchord $i$ is offset from the nominal starting
+point by $\rho_0 \, i/N$ along $\hat{\delta}_{\perp,1}$, with
+$\hat{\delta}_{\parallel}$ unchanged (no angular divergence, as in the
+3-D case), and
+\begin{equation}
+w_{i}^{\rm cyl} = \frac{1}{4 \pi (2N + 1)} = w_{i}^{\rm uniform},
+\end{equation}
+by the same flat-marginal-distribution argument as the rectangular case.
+Unlike the rectangular (and uniform/circular) reductions, this is not an
+exact consequence of toroidal symmetry: a toroidal (out-of-plane) shift
+of a fixed-direction parallel ray does not trace the same $(R,Z)$ curve
+that a toroidal rotation of the unshifted ray would (the apex-based
+cases rely on exactly that equivalence). Treating the column as flat is
+therefore an approximation, valid as long as $\rho_0$ is small compared
+to the local radius of curvature of the geometry (typically the device's
+major radius) -- the same regime in which treating a real focused beam
+as a cylinder is itself justified (see below).
 The units of $f$ are ${\rm m}^{-2}/{\rm st}$.
 
 In the 3-D case, each chord is modeled as a rectangular based pyramid
-(for rectangular or uniform weighting) or a cone (for circular
-weighting), each emanating from the apex of the view (the starting
-point) and subtending a solid angle on the order of $\delta^{2}$, where
-$\delta$ is the specified halfwidth expressed in radians. More
+(for rectangular or uniform weighting), a cone (for circular weighting),
+or a constant-radius collection tube with no apex at all (for
+cylindrical weighting, discussed separately below). The pyramid and
+cone both emanate from the apex of the view (the starting point) and
+subtend a solid angle on the order of $\delta^{2}$, where $\delta$ is
+the specified halfwidth expressed in radians. More
 precisely, the solid angles are
 \begin{equation}
 \Omega^{\rm uniform} = 4 \arctan \frac{\sin^{2} \delta}{\sqrt{1
@@ -5946,10 +5973,11 @@ principal direction is aligned with $\hat{x}$ instead. The secondary
 perpendicular dimension is
 $\hat{\delta}_{\perp,2} = \hat{\delta}_{\parallel} \times
 \hat{\delta}_{\perp,1}$.
-For views with symmetry about the parallel direction (uniform and
-circular) both perpendicular directions are arbitrary. However, for the
-rectangular case the user should take care in specifying the angles
-$\delta_1$ and $\delta_2$ according to their calculated directions.
+For views with symmetry about the parallel direction (uniform, circular,
+and cylindrical) both perpendicular directions are arbitrary. However,
+for the rectangular case the user should take care in specifying the
+angles $\delta_1$ and $\delta_2$ according to their calculated
+directions.
 
 The velocity vector sent to the tracking algorithm in the uniform
 case is
@@ -6012,6 +6040,54 @@ and the weight for each subchord is
 w_{j,k}^{\rm circular} = \frac{ \delta }{4 \Omega^{\rm circular} n^{2}}
 \sin \theta_{k}.
 \end{equation}
+
+The cylindrical case has no apex: it models a collection tube of
+constant radius $\rho_0$ (the view's single size parameter) with no
+angular divergence at all, matching a real diagnostic view that passes
+through a lens/fiber and becomes an approximately collimated beam
+through the plasma. This is a good approximation whenever the beam's
+divergence is negligible over the viewing distance -- for example, a
+small-diameter, focused beam at optical wavelengths typically has a
+Rayleigh range far larger than the viewing distances encountered in a
+laboratory plasma, so its divergence can be neglected and a cylinder of
+constant radius $\rho_0$ is an accurate model.
+
+Every subchord shares the exact same direction $\hat{\delta}_{\parallel}$;
+there is no direction offset as in the other 3-D cases. Instead, each
+subchord's starting position is offset transversely from the nominal
+starting point, within a disk of radius $\rho_0$ centered on it, using
+the same azimuthal discretization as the conical case,
+$\phi_j = (j-1/2)\pi/n$ for $j = 1 \rightarrow 2n$, and a radial
+discretization $r_k = (k-1/2)\rho_0/n$ for $k = 1 \rightarrow n$:
+\begin{equation}
+\vec{x}_{0,j,k}^{\rm cyl} = \vec{x}_0 + r_k \left( \cos\phi_j \,
+\hat{\delta}_{\perp,1} + \sin\phi_j \, \hat{\delta}_{\perp,2} \right).
+\end{equation}
+
+A literal zero-divergence ray bundle has no solid angle of its own, yet
+the output must still carry the same ${\rm m}^{-2}/{\rm sr}$ convention
+as the other algorithms (e.g., to match a calibration against an
+integrating sphere, in ${\rm W/m^2/sr}$). This is possible because, for
+every other algorithm, $w_{jk} = \frac{1}{4\pi}\frac{\Omega_{jk}}{\Omega}$
+sums to exactly $\frac{1}{4\pi}$ regardless of the view's actual
+halfwidth or solid angle, since $\sum_{jk}\Omega_{jk} = \Omega$ by
+construction. The $1/4\pi$ is therefore not describing the detector's
+own aperture at all -- it is the conversion from an isotropic
+(full-$4\pi$-steradian) emission-rate convention (how, e.g., $A_{23}$
+and $E_{23}$ are defined) into a per-steradian intensity along one line
+of sight. The halfwidth or solid angle only controls how that fixed
+$1/4\pi$ weight budget is distributed among subchords (how much
+spatial or angular averaging occurs) -- never the total. The
+cylindrical case therefore reuses the identical $1/4\pi$ budget,
+distributed by cross-sectional area fraction instead of solid-angle
+fraction:
+\begin{equation}
+w_{j,k}^{\rm cyl} = \frac{1}{4\pi} \frac{r_k \, (\rho_0/n)(\pi/n)}{\pi
+\rho_0^2} = \frac{r_k}{4\pi n^2 \rho_0}.
+\end{equation}
+Since $\hat{\delta}_{\parallel}$ is already a unit vector and is used
+unmodified as every subchord's direction, $\Vert \vec{v}_{j,k}^{\rm
+cyl}\Vert = 1$ always.
 
 The resulting contribution to the chord by each zone
 is again given by Eq.~(\ref{zonefrag}) in both cases.

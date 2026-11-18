@@ -48,6 +48,7 @@ For additional details, see the documentation at the top of
       var_alloc(de_view_points)
       var_alloc(de_view_algorithm)
       var_alloc(de_view_halfwidth)
+      var_alloc(de_view_halfwidth2)
 
       call initialize_zone_frags
       

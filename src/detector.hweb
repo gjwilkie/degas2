@@ -40,6 +40,8 @@ intended to be represented by the diagnostic sub-class of sectors.
 @m de_algorithm_unknown 0
 @m de_algorithm_uniform 1
 @m de_algorithm_circular 2
+@m de_algorithm_rectangular 3
+@m de_algorithm_cylindrical 4
 
 @m de_view_pointer(i,grp) de_view_tab[de_view_base[grp]+i-1]
 
@@ -75,8 +77,9 @@ intended to be represented by the diagnostic sub-class of sectors.
       
       define_dimen_pk(de,de_start_end_ind,de_view_start,de_view_end)
       define_varp_pk(de,de_view_points,FLOAT,vector,de_start_end_ind,de_tot_view_ind)
-      define_varp_pk(de,de_view_algorithm,INT,de_tot_view_ind)                       
+      define_varp_pk(de,de_view_algorithm,INT,de_tot_view_ind)
       define_varp_pk(de,de_view_halfwidth,FLOAT,de_tot_view_ind)
+      define_varp_pk(de,de_view_halfwidth2,FLOAT,de_tot_view_ind)
       
       define_varp_pk(de,de_zone_frags,FLOAT,de_zone_frags_ind)
       define_varp_pk(de,de_zone_frags_start,INT,de_tot_view_ind)
@@ -150,13 +153,22 @@ defined.
 of the start |se| = |de_view_start| or end |de_view_end| of viewing
 chord |view_ind|.
 
-  \item[|de_view_algorithm[view_ind]|] Algorithm (currently 
-|de_algorithm_uniform| or |de_uniform_circular|) for averaging over the
+  \item[|de_view_algorithm[view_ind]|] Algorithm (currently
+|de_algorithm_uniform|, |de_algorithm_circular|, |de_algorithm_rectangular|,
+or |de_algorithm_cylindrical|) for averaging over the
 detector viewing width. See subr. |detector_view_setup| for implementation
 details.
 
-  \item[|de_view_halfwidth[view_ind]|] Angular half-width (in radians) 
-associated with the viewing chord |view_ind|.
+  \item[|de_view_halfwidth[view_ind]|] Angular half-width (in radians)
+associated with the viewing chord |view_ind|. For |de_algorithm_rectangular|
+this is the half-width $\delta_1$ along |delta_perp_1| (see
+|detector_view_setup|). For |de_algorithm_cylindrical| this field instead
+holds the collection tube's radius, in meters (not an angle).
+
+  \item[|de_view_halfwidth2[view_ind]|] Second angular half-width (in
+radians), $\delta_2$, along |delta_perp_2|. Only meaningful when
+|de_view_algorithm[view_ind] == de_algorithm_rectangular|; otherwise unused
+(|real_unused|).
 
   \item[|de_zone_frags[zone_frags_ind]|] Compressed array containing
 the path lengths of chords through all of the zones in the

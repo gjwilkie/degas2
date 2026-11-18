@@ -40,6 +40,7 @@ adopted from btopdetector.web
       var_alloc(de_view_points)
       var_alloc(de_view_algorithm)
       var_alloc(de_view_halfwidth)
+      var_alloc(de_view_halfwidth2)
 
       call initialize_zone_frags
 
@@ -273,7 +274,7 @@ so that their array indexing gets handled correctly.
             z_end = rtan_pol[view]
             r_end = ztan_pol[view]
             vc_set(de_view_points[view][de_view_end],r_end,zero,z_end)
-            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_algorithm[view],zone_frags)
+            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],real_unused,de_view_algorithm[view],zone_frags)
             call add_zone_frags(view,zone_frags)
          end do
 
@@ -306,7 +307,7 @@ so that their array indexing gets handled correctly.
             y_end = ytan_tor[view]
             z_end = ztan_tor[view]
             vc_set(de_view_points[view][de_view_end],x_end,y_end,z_end)
-            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_algorithm[view],zone_frags)
+            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],real_unused,de_view_algorithm[view],zone_frags)
             call add_zone_frags(view+Ndet_pol,zone_frags)
          end do
 

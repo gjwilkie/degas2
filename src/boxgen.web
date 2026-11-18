@@ -1040,7 +1040,7 @@ from the corresponding function. This is all strictly 1-D.
 @ Set up detectors for unit box geometry. {\em Note: this routine is
 geometry-specific!}
 
-@m total_views 6   // To be used as a local dimension
+@m total_views 8   // To be used as a local dimension
 @<Functions...@>=
       subroutine detector_setup
 
@@ -1117,6 +1117,32 @@ so that their array indexing gets handled correctly.
       de_view_halfwidth2[6]=const(6.)*PI/const(1.8,2)  // arbitrary, != halfwidth[6]
       vc_set(de_view_points[6][de_view_start],x_max+geom_epsilon,zero,half*(z_max-z_min)+z_min)
       vc_set(de_view_points[6][de_view_end],x_min-geom_epsilon,half*y_max,const(0.25)*(z_max-z_min)+z_min)
+
+/*
+   View 7 exercises the 3-D branch of the cylindrical algorithm
+   (|de_algorithm_cylindrical|): |de_view_halfwidth| holds the tube's
+   radius (in meters, not an angle) here. As with view 6, the chord has a
+   nonzero $y$ component so it is unambiguously routed through the 3-D
+   branch of |detector_view_setup|.
+*/
+      de_view_algorithm[7]=de_algorithm_cylindrical
+      de_view_halfwidth[7]=const(3.,-2)   // arbitrary radius, small vs. domain
+      de_view_halfwidth2[7]=real_unused
+      vc_set(de_view_points[7][de_view_start],x_max+geom_epsilon,zero,half*(z_max-z_min)+z_min)
+      vc_set(de_view_points[7][de_view_end],x_min-geom_epsilon,half*y_max,const(0.75)*(z_max-z_min)+z_min)
+
+/*
+   View 8 exercises the 2-D ``column'' reduction of the cylindrical
+   algorithm: a chord with zero $y$ component, like views 1-5, so it is
+   routed through the 2-D symmetric branch whenever this geometry's
+   symmetry setting allows it (the same way views 1-5 do for the uniform
+   algorithm); otherwise it simply exercises the 3-D branch again.
+*/
+      de_view_algorithm[8]=de_algorithm_cylindrical
+      de_view_halfwidth[8]=const(3.,-2)   // arbitrary radius, small vs. domain
+      de_view_halfwidth2[8]=real_unused
+      vc_set(de_view_points[8][de_view_start],x_max+geom_epsilon,zero,half*(z_max-z_min)+z_min)
+      vc_set(de_view_points[8][de_view_end],x_min-geom_epsilon,zero,const(0.6)*(z_max-z_min)+z_min)
 
       do view=1,detector_total_views
          call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_halfwidth2[view],de_view_algorithm[view],zone_frags)

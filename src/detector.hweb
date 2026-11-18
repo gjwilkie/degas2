@@ -41,6 +41,7 @@ intended to be represented by the diagnostic sub-class of sectors.
 @m de_algorithm_uniform 1
 @m de_algorithm_circular 2
 @m de_algorithm_rectangular 3
+@m de_algorithm_cylindrical 4
 
 @m de_view_pointer(i,grp) de_view_tab[de_view_base[grp]+i-1]
 
@@ -153,15 +154,16 @@ of the start |se| = |de_view_start| or end |de_view_end| of viewing
 chord |view_ind|.
 
   \item[|de_view_algorithm[view_ind]|] Algorithm (currently
-|de_algorithm_uniform|, |de_algorithm_circular|, or
-|de_algorithm_rectangular|) for averaging over the
+|de_algorithm_uniform|, |de_algorithm_circular|, |de_algorithm_rectangular|,
+or |de_algorithm_cylindrical|) for averaging over the
 detector viewing width. See subr. |detector_view_setup| for implementation
 details.
 
   \item[|de_view_halfwidth[view_ind]|] Angular half-width (in radians)
 associated with the viewing chord |view_ind|. For |de_algorithm_rectangular|
 this is the half-width $\delta_1$ along |delta_perp_1| (see
-|detector_view_setup|).
+|detector_view_setup|). For |de_algorithm_cylindrical| this field instead
+holds the collection tube's radius, in meters (not an angle).
 
   \item[|de_view_halfwidth2[view_ind]|] Second angular half-width (in
 radians), $\delta_2$, along |delta_perp_2|. Only meaningful when

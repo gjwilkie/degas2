@@ -31,8 +31,10 @@ are somewhat more general.
 
 @<Functions and Subroutines@>
 
-@ Setup detector view data for a single chord.  The endpoints, halfwidth,
-and averaging algorithm (uniform or circular) are input.  The geometry 
+@ Setup detector view data for a single chord.  The endpoints, halfwidth(s),
+and averaging algorithm (uniform, circular, or rectangular) are input.  The
+second halfwidth, |halfwidth2|, is only used for the rectangular algorithm;
+callers using uniform or circular should pass |real_unused|. The geometry
 tracking algorithm traces the chord (via the subchords that emulate
 the width of the view) through the problem space, yielding the relative
 contribution from each zone, |zone_frags|.  The arguments do directly
@@ -52,12 +54,13 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
       
 @m view_symmetric 1     // For 2-D symmetric cases
 
-@m view_3d_uniform 2    // These two denote 3-D cases, one for
-@m view_3d_circular 3   // each of the two algorithm options
+@m view_3d_uniform 2      // These three denote 3-D cases, one for
+@m view_3d_circular 3     // each of the three algorithm options
+@m view_3d_rectangular 4
 
 @<Functions...@>=
-      subroutine detector_view_setup(vc_dummy(points),halfwidth,algorithm,
-     $                                 zone_frags)
+      subroutine detector_view_setup(vc_dummy(points),halfwidth,halfwidth2,
+     $                                 algorithm,zone_frags)
 
       implicit_none_f77
       gi_common                           // Common
@@ -66,13 +69,15 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
 
       integer algorithm                   // Input
       real halfwidth
+      real halfwidth2                     // Second halfwidth; only used
+                                           // for de_algorithm_rectangular
       vc_decl(points[de_view_start:de_view_end])
 
       real zone_frags[zn_num]             // Output
-      
+
       integer j,k,option,jmin,jmax,       // Local
-     $        kmin,kmax,nang         
-      real ang,dang,mult,tmax,t,theta_k,phi_j,omega
+     $        kmin,kmax,nang
+      real ang,dang,dang2,mult,tmax,t,theta_k,phi_j,omega
       logical done
       lc_decl(xx)
       vc_decl(x0)
@@ -103,9 +108,10 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
       end do
 
       vc_set(yhat,zero,one,zero)    // Ignorable coordinate in sym. geom.
-      vc_set(xhat,one,zero,zero)    // The other two coordinate axes; used 
+      vc_set(xhat,one,zero,zero)    // The other two coordinate axes; used
       vc_set(zhat,zero,zero,one)    // for 3-D cases
       dang=halfwidth
+      dang2=halfwidth2
       vc_copy(points[de_view_start],x0)
       vc_copy(points[de_view_end],x1)
       vc_difference(x1,x0,deltax)
@@ -117,7 +123,18 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
    coordinate, the last expression in this group was actually
    an assertion there.  Additional details on the approach
    used here are provided in the {\em Defining Radiation
-   Detectors} section of the User's Manual. 
+   Detectors} section of the User's Manual.
+
+   For |de_algorithm_rectangular|, |delta_perp| below is identical to the
+   3-D case's |delta_perp_1| (both reduce to the component of |zhat|
+   perpendicular to the chord, since the chord has no $\hat{y}$ component
+   here), i.e., the ``vertical'' halfwidth |halfwidth| ($\delta_1$). The
+   other halfwidth, |halfwidth2| ($\delta_2$), is not needed: the marginal
+   distribution of a uniform rectangular pyramid along one perpendicular
+   axis is uniform over that axis regardless of the other axis's extent,
+   so the 2-D reduction is identical in form to |de_algorithm_uniform|
+   (which is just the $\delta_1 = \delta_2$ special case) and does not
+   depend on $\delta_2$ at all.
 */
       if (((geometry_symmetry == geometry_symmetry_plane) ||
      $     (geometry_symmetry == geometry_symmetry_oned) ||
@@ -132,35 +149,49 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
          kmax=1
       else 
 /*
-   This is for the 3-D cases. We first need to define vectors 
-   perpendicular to the chord.  Assume that the choice of these vectors 
-   is otherwise arbitrary. Begin by determining
-   which of the coordinate axes is ``most perpendicular'' to the 
-   chord direction; that ends up being $\vec{u}$. Additional details 
-   on the approach used here are provided in the {\em Defining Radiation
-   Detectors} section of the User's Manual. 
+   This is for the 3-D cases. We first need to define vectors
+   perpendicular to the chord.  For the uniform and circular algorithms,
+   the choice of these vectors is otherwise arbitrary; we determine
+   which of the coordinate axes is ``most perpendicular'' to the
+   chord direction, calling that $\vec{u}$. The rectangular algorithm's two
+   halfwidths apply to specific directions the user must know in advance,
+   so instead we use a deterministic convention: |delta_perp_1| is the
+   component of |zhat| perpendicular to the chord (i.e., oriented toward
+   vertical), unless the chord itself is vertical, in which case |xhat| is
+   used instead. Additional details on the approach used here are provided
+   in the {\em Defining Radiation Detectors} section of the User's Manual.
 */
-         vc_cross(delta_par,xhat,ux)
-         vc_cross(delta_par,yhat,uy)
-         vc_cross(delta_par,zhat,uz)
-         if (vc_abs(ux) >= max(vc_abs(uy),vc_abs(uz))) then
-            vc_copy(xhat,u)
-         else if (vc_abs(uy) >= max(vc_abs(ux),vc_abs(uz))) then
-            vc_copy(yhat,u)
+         if (algorithm == de_algorithm_rectangular) then
+            vc_xvt(zhat,delta_par,-vc_product(zhat,delta_par),delta_perp_1)
+            if (vc_abs(delta_perp_1) <= epsilon) then
+               vc_xvt(xhat,delta_par,-vc_product(xhat,delta_par),delta_perp_1)
+            end if
+            vc_unit(delta_perp_1,delta_perp_1)
+            vc_cross(delta_par,delta_perp_1,delta_perp_2)
+            vc_unit(delta_perp_2,delta_perp_2)
          else
-            assert(vc_abs(uz) > max(vc_abs(ux),vc_abs(uy)))
-            vc_copy(zhat,u)
+            vc_cross(delta_par,xhat,ux)
+            vc_cross(delta_par,yhat,uy)
+            vc_cross(delta_par,zhat,uz)
+            if (vc_abs(ux) >= max(vc_abs(uy),vc_abs(uz))) then
+               vc_copy(xhat,u)
+            else if (vc_abs(uy) >= max(vc_abs(ux),vc_abs(uz))) then
+               vc_copy(yhat,u)
+            else
+               assert(vc_abs(uz) > max(vc_abs(ux),vc_abs(uy)))
+               vc_copy(zhat,u)
+            end if
+            vc_cross(delta_par,u,delta_perp_1)
+            vc_unit(delta_perp_1,delta_perp_1)
+            vc_cross(delta_par,delta_perp_1,delta_perp_2)
+            vc_unit(delta_perp_2,delta_perp_2)
          end if
-         vc_cross(delta_par,u,delta_perp_1)
-         vc_unit(delta_perp_1,delta_perp_1)
-         vc_cross(delta_par,delta_perp_1,delta_perp_2)
-         vc_unit(delta_perp_2,delta_perp_2)
          assert(vc_product(delta_par,delta_perp_1) <= epsilon)
          assert(vc_product(delta_par,delta_perp_2) <= epsilon)
          assert(vc_product(delta_perp_1,delta_perp_2) <= epsilon)
          if (algorithm == de_algorithm_uniform) then
             option=view_3d_uniform
-            nang=6   
+            nang=6
             jmin=1
             jmax=2*nang
             kmin=1
@@ -172,6 +203,14 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
             jmax=2*nang
             kmin=1
             kmax=nang
+         else
+            assert(algorithm == de_algorithm_rectangular)
+            option=view_3d_rectangular
+            nang=6
+            jmin=1
+            jmax=2*nang
+            kmin=1
+            kmax=2*nang
          end if
       end if
 /*
@@ -185,7 +224,8 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
                ang=dang*areal(j)/areal(nang)
                vc_scale(cos(ang),delta_par,v)
                vc_xvt(v,delta_perp,sin(ang),v)
-               if (algorithm == de_algorithm_uniform) then
+               if (algorithm == de_algorithm_uniform ||
+     $              algorithm == de_algorithm_rectangular) then
                   mult=one/(const(4.)*PI*areal(2*nang+1))
                else if (algorithm == de_algorithm_circular) then
                   mult=one/(two*PI**2*areal(nang))*sqrt(one-(areal(j)/areal(nang))^2)
@@ -198,6 +238,13 @@ We will refer to both of these situations, for simplicity, as ``3-D''.
                vc_xvt(v,delta_perp_2,(areal(k)-half-areal(nang))*sin(dang)/areal(nang),v)
                omega=const(4.)*atan((sin(dang))**2 / (sqrt(one+two*(sin(dang))**2)))
                mult=(sin(dang))**2/(const(4.)*PI
+     $              *(areal(nang)**2*(vc_abs(v))**3)*omega)
+            else if (option == view_3d_rectangular) then
+               vc_copy(delta_par,v)
+               vc_xvt(v,delta_perp_1,(areal(j)-half-areal(nang))*tan(dang)/areal(nang),v)
+               vc_xvt(v,delta_perp_2,(areal(k)-half-areal(nang))*tan(dang2)/areal(nang),v)
+               omega=const(4.)*asin(sin(dang)*sin(dang2))
+               mult=(tan(dang)*tan(dang2))/(const(4.)*PI
      $              *(areal(nang)**2*(vc_abs(v))**3)*omega)
             else
                assert(option == view_3d_circular)
@@ -785,6 +832,7 @@ not-coincidental similarity to |diag_grp_init|.
       vc_set(de_view_points[0][de_view_end],real_unused,real_unused,real_unused)
       de_view_algorithm[0]=int_unused
       de_view_halfwidth[0]=real_unused
+      de_view_halfwidth2[0]=real_unused
 @#if 0   // Do not need this now?
       do i=1,zn_num
          de_zone_frags[i][0]=real_unused

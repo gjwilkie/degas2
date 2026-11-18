@@ -1040,7 +1040,7 @@ from the corresponding function. This is all strictly 1-D.
 @ Set up detectors for unit box geometry. {\em Note: this routine is
 geometry-specific!}
 
-@m total_views 5   // To be used as a local dimension
+@m total_views 6   // To be used as a local dimension
 @<Functions...@>=
       subroutine detector_setup
 
@@ -1055,6 +1055,7 @@ geometry-specific!}
       var_alloc(de_view_points)
       var_alloc(de_view_algorithm)
       var_alloc(de_view_halfwidth)
+      var_alloc(de_view_halfwidth2)
 
       call initialize_zone_frags
       
@@ -1095,17 +1096,30 @@ so that their array indexing gets handled correctly.
       do view=1,detector_total_views
          de_view_algorithm[view]=de_algorithm_uniform
          de_view_halfwidth[view]=const(3.)*PI/const(1.8,2)  // arbitary
+         de_view_halfwidth2[view]=real_unused
          vc_set(de_view_points[view][de_view_start],x_max+geom_epsilon,zero,half*(z_max-z_min)+z_min)
       end do
-      
+
       vc_set(de_view_points[1][de_view_end],half*(x_max-x_min)+x_min,zero,z_min-geom_epsilon)
       vc_set(de_view_points[2][de_view_end],x_min-geom_epsilon,zero,const(0.25)*(z_max-z_min)+z_min)
       vc_set(de_view_points[3][de_view_end],x_min-geom_epsilon,zero,half*(z_max-z_min)+z_min)
       vc_set(de_view_points[4][de_view_end],x_min-geom_epsilon,zero,const(0.75)*(z_max-z_min)+z_min)
       vc_set(de_view_points[5][de_view_end],half*(x_max-x_min)+x_min,zero,z_max+geom_epsilon)
 
+/*
+   View 6 exercises the rectangular algorithm (|de_algorithm_rectangular|):
+   two distinct angular half-widths, and a chord with a nonzero $y$
+   component so it is unambiguously routed through the 3-D branch of
+   |detector_view_setup| regardless of the geometry's symmetry setting.
+*/
+      de_view_algorithm[6]=de_algorithm_rectangular
+      de_view_halfwidth[6]=const(3.)*PI/const(1.8,2)   // arbitrary
+      de_view_halfwidth2[6]=const(6.)*PI/const(1.8,2)  // arbitrary, != halfwidth[6]
+      vc_set(de_view_points[6][de_view_start],x_max+geom_epsilon,zero,half*(z_max-z_min)+z_min)
+      vc_set(de_view_points[6][de_view_end],x_min-geom_epsilon,half*y_max,const(0.25)*(z_max-z_min)+z_min)
+
       do view=1,detector_total_views
-         call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_algorithm[view],zone_frags)
+         call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_halfwidth2[view],de_view_algorithm[view],zone_frags)
          call add_zone_frags(view,zone_frags)
       end do
       

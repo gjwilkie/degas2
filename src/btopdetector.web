@@ -52,6 +52,7 @@ bypass experiments.
       var_alloc(de_view_points)
       var_alloc(de_view_algorithm)
       var_alloc(de_view_halfwidth)
+      var_alloc(de_view_halfwidth2)
 
       call initialize_zone_frags
       
@@ -121,7 +122,7 @@ so that their array indexing gets handled correctly.
             z_end=zero
             r_end=r0ha+(z0ha-z_end)*tan((theta[view]-const(2.7,2))*PI/const(1.8,2))
             vc_set(de_view_points[view][de_view_end],r_end,zero,z_end)
-            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],de_view_algorithm[view],zone_frags)
+            call detector_view_setup(vc_args(de_view_points[view][de_view_start]),de_view_halfwidth[view],real_unused,de_view_algorithm[view],zone_frags)
             call add_zone_frags(view,zone_frags)
          end do
       

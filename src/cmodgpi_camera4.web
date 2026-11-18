@@ -106,6 +106,7 @@ data for the GPI would be passed on to postdetector.
       var_alloc(de_view_points)
       var_alloc(de_view_algorithm)
       var_alloc(de_view_halfwidth)
+      var_alloc(de_view_halfwidth2)
 
       call initialize_zone_frags
       
@@ -276,7 +277,7 @@ detector class arrays.
       halfwidth=view_width 
       vc_set(points[de_view_start],x_p0,y_p0,z_p0)
       vc_set(points[de_view_end],x_p,y_p,z_p)
-      call detector_view_setup(vc_args(points[de_view_start]),halfwidth,
+      call detector_view_setup(vc_args(points[de_view_start]),halfwidth,real_unused,
      $     algorithm,zone_frags)
 
       return
@@ -334,7 +335,7 @@ calling with a reduced number of views.
       halfwidth=view_width_apd 
       vc_set(points[de_view_start],x_pc,y_pc,z_pc)
       vc_set(points[de_view_end],x_p,y_p,z_p)
-      call detector_view_setup(vc_args(points[de_view_start]),halfwidth,
+      call detector_view_setup(vc_args(points[de_view_start]),halfwidth,real_unused,
      $     algorithm,zone_frags)
 
       return

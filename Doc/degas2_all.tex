@@ -5872,6 +5872,8 @@ component along the ignorable component or a 3-D geometry.
 For simplicity, we will refer to this as the ``3-D'' situation.
 \end{enumerate}
 
+In either case, views are divided into subchords in order 
+to perform an average over the finite observation volume of the model detector.
 In the 2-D case, an effective average over a 3-D cone is computed
 by exploiting the assumed symmetry in the ignorable coordinate.
 The 2-D viewing cone is divided into 30 subchords / degree. The code
@@ -5889,7 +5891,7 @@ f(z_{j}) = \sum_{i=-N}^{N}  d_{i,j} w_{i} / V_{j},
 \label{zonefrag}
 \end{equation}
 where $d_{i,j} = $ is the distance along subchord $i$ through zone $j$, 
-and $V_{j}$ is the volume of zone $j$.  The relative weight of each
+and $V_{j}$ is the volume of zone $j$. The units of $f$ are ${\rm m}^{-2}/{\rm st}$.  The relative weight of each
 subchord is $w_{i}$ with
 \begin{equation}
 w_{i}^{\rm uniform} = \frac{1}{4 \pi (2N + 1)},
@@ -5898,28 +5900,31 @@ and
 \begin{equation}
 w_{i}^{\rm circular} = \frac{1}{2 \pi^{2} N \sqrt{1 - (i/N)^2}}.
 \end{equation}
+The `uniform' and `circular' cases correspond to views in the shape of a square based pyramid (uniform) and 
+a cone (`circular'). Rectangular-based pyramidal views are also supported. 
+However, for 2-D cases they are equivalent to the `uniform' weighting above. 
+
 % Cylindrical and beam algorithms are drafted but not yet implemented;
 % their 2-D reduction is not yet worked out.
-For the rectangular case, $N$ is computed from $\delta_1$ (the halfwidth
-associated with $\hat{\delta}_{\perp,1}$, i.e., the vertical/in-plane
-direction) exactly as for the uniform case, and
-\begin{equation}
-w_{i}^{\rm rect} = \frac{1}{4 \pi (2N + 1)} = w_{i}^{\rm uniform}.
-\end{equation}
-$\delta_2$ does not appear: for a chord confined to the symmetry plane
-(no $\hat{y}$ component), $\hat{\delta}_{\perp,1}$ as defined in the 3-D
-case coincides exactly with the 2-D case's averaging direction
-($\hat{\delta}_{\perp,1} = \hat{\delta}_{\parallel}\times\hat{y}$ in this
-limit), and the marginal distribution of a uniform rectangular pyramid
-along one perpendicular axis is uniform over that axis regardless of the
-other axis's extent. The uniform case is simply the $\delta_1 = \delta_2$
-special case of this.
+%For the rectangular case, $N$ is computed from $\delta_1$ (the halfwidth
+%associated with $\hat{\delta}_{\perp,1}$, i.e., the vertical/in-plane
+%direction) exactly as for the uniform case, and
+%\begin{equation}
+%w_{i}^{\rm rect} = \frac{1}{4 \pi (2N + 1)} = w_{i}^{\rm uniform}.
+%\end{equation}
+%$\delta_2$ does not appear: for a chord confined to the symmetry plane
+%(no $\hat{y}$ component), $\hat{\delta}_{\perp,1}$ as defined in the 3-D
+%case coincides exactly with the 2-D case's averaging direction
+%($\hat{\delta}_{\perp,1} = \hat{\delta}_{\parallel}\times\hat{y}$ in this
+%limit), and the marginal distribution of a uniform rectangular pyramid
+%along one perpendicular axis is uniform over that axis regardless of the
+%other axis's extent. The uniform case is simply the $\delta_1 = \delta_2$
+%special case of this.
 
-For the cylindrical case, the view is modeled as a flat ``column'': a
+For cylindrical views in 2-D, the view is modeled as a flat ``column'': a
 band of half-width $\rho_0$ (a length, not an angle) confined to the
-symmetry plane. $N$ is fixed (currently $N=6$) rather than computed from
-$\rho_0$ via the ``30 virtual chords per degree'' rule, since $\rho_0$
-is not an angle. Each subchord $i$ is offset from the nominal starting
+symmetry plane. The number of subchords, $N$, is fixed (currently $N=6$) rather than computed from
+$\rho_0$ via the ``30 virtual chords per degree'' rule. Each subchord $i$ is offset from the nominal starting
 point by $\rho_0 \, i/N$ along $\hat{\delta}_{\perp,1}$, with
 $\hat{\delta}_{\parallel}$ unchanged (no angular divergence, as in the
 3-D case), and
@@ -5936,16 +5941,24 @@ therefore an approximation, valid as long as $\rho_0$ is small compared
 to the local radius of curvature of the geometry (typically the device's
 major radius) -- the same regime in which treating a real focused beam
 as a cylinder is itself justified (see below).
-The units of $f$ are ${\rm m}^{-2}/{\rm st}$.
 
-In the 3-D case, each chord is modeled as a rectangular based pyramid
+In 3-D cases, each chord can be modeled as a rectangular based pyramid
 (for rectangular or uniform weighting), a cone (for circular weighting),
 or a constant-radius collection tube with no apex at all (for
 cylindrical weighting, discussed separately below). The pyramid and
 cone both emanate from the apex of the view (the starting point) and
 subtend a solid angle on the order of $\delta^{2}$, where $\delta$ is
-the specified halfwidth expressed in radians. More
-precisely, the solid angles are
+the specified halfwidth expressed in radians. In all 3-D cases, the view is discretized into
+subchords in the two dimensions orthogonal to the view axis.  For apex-based views, 
+the weight of each subchord is derived based on the fraction of the total solid angle
+subtended by each subchord,
+\begin{equation}\label{eq:general_subchord_weight}
+w_{j,k} = \frac{1}{4\pi}\frac{\Omega_{j,k}}{\Omega^{\rm total}},
+\end{equation}
+wherein the solid angles $\Omega_{j,k}$ and $\Omega^{\rm total}$ depend on the view type
+and the view size parameter, $\delta$.
+
+More precisely, the total solid angles are
 \begin{equation}
 \Omega^{\rm uniform} = 4 \arctan \frac{\sin^{2} \delta}{\sqrt{1
 + 2 \sin^{2} \delta}} \rightarrow 4 \delta^{2},
@@ -5954,30 +5967,28 @@ precisely, the solid angles are
 \Omega^{\rm circular} = 2 \pi (1 - \cos \delta) \rightarrow \pi
 \delta^{2},
 \end{equation}
-and, for a rectangular pyramid with dihedral half-angles $\delta_1$ and
-$\delta_2$,
 \begin{equation}
 \Omega^{\rm rect} = 4\arcsin(\sin \delta_1 \sin \delta_2) \rightarrow 4
 \delta_1 \delta_2,
 \end{equation}
 where the arrows indicate the value in the $\delta \ll 1$ limit.
+In the rectangular case $\delta_1$ and $\delta_2$ are the dihedral half-angles.
 
-The subchords are used to perform a 2-D integration over this solid
+For these 3-D apex-based cases, the subchords are used to perform a 2-D integration over this solid
 angle. The direction of each subchord is defined relative to that
 of the detector chord; call the corresponding unit vector
 $\hat{\delta}_{\parallel}$. The principal perpendicular dimension,
 $\hat{\delta}_{\perp,1}$, is chosen to be orthogonal to
 $\hat{\delta}_{\parallel}$ and oriented in the vertical, $\hat{z}$,
-direction; however, if $\hat{\delta}_{\parallel} = \hat{z}$ then the
+direction unless $\hat{\delta}_{\parallel} = \hat{z}$, then the
 principal direction is aligned with $\hat{x}$ instead. The secondary
 perpendicular dimension is
 $\hat{\delta}_{\perp,2} = \hat{\delta}_{\parallel} \times
 \hat{\delta}_{\perp,1}$.
-For views with symmetry about the parallel direction (uniform, circular,
-and cylindrical) both perpendicular directions are arbitrary. However,
+For views with symmetry about the parallel direction (uniform, circular)
+both perpendicular directions are arbitrary. However,
 for the rectangular case the user should take care in specifying the
-angles $\delta_1$ and $\delta_2$ according to their calculated
-directions.
+angles $\delta_1$ and $\delta_2$ according to their implied, calculated directions.
 
 The velocity vector sent to the tracking algorithm in the uniform
 case is
@@ -5994,35 +6005,51 @@ w_{j,k}^{\rm uniform} = \frac{\sin^{2} \delta}{4 \pi \Omega^{\rm uniform}
 n^{2}}\left| \vec{v}_{j,k}^{\rm uniform} \right|^{-3/2}.
 \end{equation}
 
-The weight assigned to each subchord in the rectangular case is instead
-expressed as the fraction of the total solid angle, $\Omega^{\rm rect}$,
-normalized by the total $4\pi$,
-\begin{equation}
-w_{j,k} = \frac{1}{4\pi}\frac{\Omega_{j,k}}{\Omega^{\rm rect}},
-\end{equation}
-where the solid angle of each subchord patch is
-\begin{equation}
-\Omega_{j,k}^{\rm rect} = \frac{\tan(\delta_1)\tan(\delta_2)}{n^2}
-\left\Vert \vec{v}_{j,k}^{\rm rect} \right\Vert^{-3},
-\end{equation}
-with the velocity vector sent to the tracking algorithm
+
+The velocity vector sent to the tracking algorithm in the rectangular
+case is
 \begin{equation}
 \vec{v}_{j,k}^{\rm rect} = \hat{\delta}_{\parallel}
 + \frac{(j - 1/2) - n}{n} \tan(\delta_1) \hat{\delta}_{\perp,1}
 + \frac{(k - 1/2) - n}{n} \tan(\delta_2) \hat{\delta}_{\perp,2}.
 \end{equation}
-Thus, the weighting for each subchord is
+where the subchords are labeled by the indices $j$ and $k$,
+both ranging from 1 to $2n$; currently $n = 6$.
+The weighting for each subchord is
 \begin{equation}
 w_{j,k}^{\rm rect} = \frac{\tan(\delta_1)\tan(\delta_2)}{4 \pi
 \Omega^{\rm rect} n^{2}}\left\Vert \vec{v}_{j,k}^{\rm rect} \right\Vert^{-3}.
 \end{equation}
+
+%The weight assigned to each subchord in the rectangular case is instead
+%expressed as the fraction of the total solid angle, $\Omega^{\rm rect}$,
+%normalized by the total $4\pi$,
+%\begin{equation}
+%w_{j,k} = \frac{1}{4\pi}\frac{\Omega_{j,k}}{\Omega^{\rm rect}},
+%\end{equation}
+%where the solid angle of each subchord patch is
+%\begin{equation}
+%\Omega_{j,k}^{\rm rect} = \frac{\tan(\delta_1)\tan(\delta_2)}{n^2}
+%\left\Vert \vec{v}_{j,k}^{\rm rect} \right\Vert^{-3},
+%\end{equation}
+%with the velocity vector sent to the tracking algorithm
+%\begin{equation}
+%\vec{v}_{j,k}^{\rm rect} = \hat{\delta}_{\parallel}
+%+ \frac{(j - 1/2) - n}{n} \tan(\delta_1) \hat{\delta}_{\perp,1}
+%+ \frac{(k - 1/2) - n}{n} \tan(\delta_2) \hat{\delta}_{\perp,2}.
+%\end{equation}
+%Thus, the weighting for each subchord is
+%\begin{equation}
+%w_{j,k}^{\rm rect} = \frac{\tan(\delta_1)\tan(\delta_2)}{4 \pi
+%\Omega^{\rm rect} n^{2}}\left\Vert \vec{v}_{j,k}^{\rm rect} \right\Vert^{-3}.
+%\end{equation}
 In the $\delta_1 = \delta_2 = \delta$ limit this reproduces the
 square-based pyramid case above to leading order in $\delta$; the two
 are not identical at finite $\delta$, since {\tt de\_algorithm\_uniform}
 scales the subchord offsets by $\sin \delta$ rather than $\tan \delta$,
 for historical reasons, so {\tt de\_algorithm\_uniform} and {\tt
 de\_algorithm\_rectangular} remain distinct, independently-selectable
-algorithms.
+algorithms. The two algorithms may be consolidated in a future release.
 
 In the circular case, the azimuthal angle's $2 \pi$ radians are
 discretized into $\phi_{j} = (j - 1/2) \pi / n$, with 
@@ -6041,21 +6068,11 @@ w_{j,k}^{\rm circular} = \frac{ \delta }{4 \Omega^{\rm circular} n^{2}}
 \sin \theta_{k}.
 \end{equation}
 
-The cylindrical case has no apex: it models a collection tube of
+Finally, the cylindrical case has no apex: it models a collection tube of
 constant radius $\rho_0$ (the view's single size parameter) with no
-angular divergence at all, matching a real diagnostic view that passes
-through a lens/fiber and becomes an approximately collimated beam
-through the plasma. This is a good approximation whenever the beam's
-divergence is negligible over the viewing distance -- for example, a
-small-diameter, focused beam at optical wavelengths typically has a
-Rayleigh range far larger than the viewing distances encountered in a
-laboratory plasma, so its divergence can be neglected and a cylinder of
-constant radius $\rho_0$ is an accurate model.
-
-Every subchord shares the exact same direction $\hat{\delta}_{\parallel}$;
-there is no direction offset as in the other 3-D cases. Instead, each
-subchord's starting position is offset transversely from the nominal
-starting point, within a disk of radius $\rho_0$ centered on it, using
+angular divergence. Each subchord shares the same direction $\hat{\delta}_{\parallel}$. 
+Each subchord's starting position is offset transversely from the nominal
+starting point within a disk of radius $\rho_0$ using
 the same azimuthal discretization as the conical case,
 $\phi_j = (j-1/2)\pi/n$ for $j = 1 \rightarrow 2n$, and a radial
 discretization $r_k = (k-1/2)\rho_0/n$ for $k = 1 \rightarrow n$:
@@ -6064,33 +6081,17 @@ discretization $r_k = (k-1/2)\rho_0/n$ for $k = 1 \rightarrow n$:
 \hat{\delta}_{\perp,1} + \sin\phi_j \, \hat{\delta}_{\perp,2} \right).
 \end{equation}
 
-A literal zero-divergence ray bundle has no solid angle of its own, yet
-the output must still carry the same ${\rm m}^{-2}/{\rm sr}$ convention
-as the other algorithms (e.g., to match a calibration against an
-integrating sphere, in ${\rm W/m^2/sr}$). This is possible because, for
-every other algorithm, $w_{jk} = \frac{1}{4\pi}\frac{\Omega_{jk}}{\Omega}$
-sums to exactly $\frac{1}{4\pi}$ regardless of the view's actual
-halfwidth or solid angle, since $\sum_{jk}\Omega_{jk} = \Omega$ by
-construction. The $1/4\pi$ is therefore not describing the detector's
-own aperture at all -- it is the conversion from an isotropic
-(full-$4\pi$-steradian) emission-rate convention (how, e.g., $A_{23}$
-and $E_{23}$ are defined) into a per-steradian intensity along one line
-of sight. The halfwidth or solid angle only controls how that fixed
-$1/4\pi$ weight budget is distributed among subchords (how much
-spatial or angular averaging occurs) -- never the total. The
-cylindrical case therefore reuses the identical $1/4\pi$ budget,
-distributed by cross-sectional area fraction instead of solid-angle
-fraction:
+Rather than weighting the subchords by their fraction of the total solid angle,
+each is weighted by its fraction of the total cross sectional area, $A^{\rm total}=\pi\rho_0^2$. 
+Equation \ref{eq:general_subchord_weight} is updated to,
 \begin{equation}
-w_{j,k}^{\rm cyl} = \frac{1}{4\pi} \frac{r_k \, (\rho_0/n)(\pi/n)}{\pi
+w_{j,k}^{\rm cyl}  = \frac{1}{4\pi}\frac{A_{j,k}}{A^{\rm total}} = \frac{1}{4\pi} \frac{r_k \, (\rho_0/n)(\pi/n)}{\pi
 \rho_0^2} = \frac{r_k}{4\pi n^2 \rho_0}.
 \end{equation}
-Since $\hat{\delta}_{\parallel}$ is already a unit vector and is used
-unmodified as every subchord's direction, $\Vert \vec{v}_{j,k}^{\rm
-cyl}\Vert = 1$ always.
 
 The resulting contribution to the chord by each zone
-is again given by Eq.~(\ref{zonefrag}) in both cases.
+is again given by Eq.~(\ref{zonefrag}) in all cases. However, in 3-D cases the sum over subchords 
+is replaced by a double sum to perform the 2-D integration in the plane perpendicular to the view axis. 
 
 These zone contributions can then be used during execution of the main
 code or during post-processing to compute, say, the 
